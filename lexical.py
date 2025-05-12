@@ -41,6 +41,7 @@ def analizar_codigo_fuente(codigo):
     fila = 1
     columna = 1
     longitud = len(codigo)
+    notValidNumber = False
 
     while i < longitud:
         c = codigo[i]
@@ -90,6 +91,7 @@ def analizar_codigo_fuente(codigo):
                     fila += 1
                     columna = 1
                 else:
+                    
                     columna += 1
                 i += 1
             if cerrado:
@@ -107,7 +109,15 @@ def analizar_codigo_fuente(codigo):
             tiene_punto = False
             while i < longitud and (codigo[i].isdigit() or (codigo[i] == '.' and not tiene_punto)):
                 if codigo[i] == '.':
-                    tiene_punto = True
+                    # Verificar que haya al menos un dígito después del punto
+                    if i + 1 < longitud and codigo[i + 1].isdigit():
+                        tiene_punto = True
+                        lexema += codigo[i]
+                        i += 1
+                        columna += 1
+                    else:
+                        notValidNumber = True
+                        break  # No es un número válido, salir del bucle
                 lexema += codigo[i]
                 i += 1
                 columna += 1
@@ -152,7 +162,11 @@ def analizar_codigo_fuente(codigo):
             continue
 
         # Carácter no reconocido
-        errores.append({"linea": fila, "columna": columna, "descripcion": f"Carácter no reconocido: '{c}'", "valor": c})
+        if notValidNumber:
+            errores.append({"linea": fila, "columna": columna, "descripcion": f"Se uso un punto de forma erronea: '{c}'", "valor": c})
+            notValidNumber =False
+        else:
+            errores.append({"linea": fila, "columna": columna, "descripcion": f"Carácter no reconocido: '{c}'", "valor": c})
         i += 1
         columna += 1
 
