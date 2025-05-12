@@ -6,9 +6,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
 from PyQt5.QtSvg import QSvgRenderer
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPainter, QColor, QSyntaxHighlighter, QTextCharFormat
 
 
@@ -99,11 +98,17 @@ class CodeEditor(QPlainTextEdit):
         def highlightBlock(self, text):
             tokens, _ = self.lexer_func(text)
             for token in tokens:
-                start = text.find(token["lexema"])
-                if start >= 0:
-                    length = len(token["lexema"])
-                    fmt = self.token_format_map.get(token["tipo"], QTextCharFormat())
-                    self.setFormat(start, length, fmt)
+                lexema = token["lexema"]
+                tipo = token["tipo"]
+                formato = self.token_format_map.get(tipo, QTextCharFormat())
+                
+                pattern = QRegExp(r'\b' + QRegExp.escape(lexema) + r'\b')
+                index = pattern.indexIn(text, 0)
+                while index >= 0:
+                    length = len(lexema)
+                    self.setFormat(index, length, formato)
+                    index = pattern.indexIn(text, index + length)
+
 
     def __init__(self, status_bar):
         super().__init__()
