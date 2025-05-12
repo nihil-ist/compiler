@@ -86,17 +86,19 @@ class CodeEditor(QPlainTextEdit):
                 "IDENTIFICADOR": fmt("#FFD866"),
                 "RESERVADA": fmt("#FF6188", bold=True),
                 "NUM_ENTERO": fmt("#AB9DF2"),
-                "NUM_FLOTANTE": fmt("#78dce8"),
+                "NUM_FLOTANTE": fmt("#AB9DF2"), 
                 "COMENTARIO": fmt("#727072"),
                 "OP_ARITMETICO": fmt("#FF6188"),
-                "OP_RELACIONAL": fmt("#FF6188"),
-                "OP_LOGICO": fmt("#FF6188"),
+                "OP_RELACIONAL": fmt("#FD9353"), 
+                "OP_LOGICO": fmt("#FD9353"), 
                 "ASIGNACION": fmt("#FF6188"),
-                "DELIMITADOR": fmt("#727072"),
+                "DELIMITADOR": fmt("#FF6188"), 
+                "ERROR": fmt("#78dce8", bold=True), 
+
             }
 
         def highlightBlock(self, text):
-            tokens, _ = self.lexer_func(text)
+            tokens, errores = self.lexer_func(text) 
             for token in tokens:
                 lexema = token["lexema"]
                 tipo = token["tipo"]
@@ -113,6 +115,15 @@ class CodeEditor(QPlainTextEdit):
                     length = len(lexema)
                     self.setFormat(index, length, formato)
                     index = pattern.indexIn(text, index + length)
+            
+            for error in errores: 
+                lexema = error["valor"] 
+                formato = self.token_format_map.get("ERROR", QTextCharFormat()) 
+                pattern = QRegExp(QRegExp.escape(lexema)) 
+                index = pattern.indexIn(text, 0) 
+                while index >= 0: 
+                    self.setFormat(index, len(lexema), formato) 
+                    index = pattern.indexIn(text, index + len(lexema)) 
 
 
 
