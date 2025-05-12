@@ -111,17 +111,19 @@ def analizar_codigo_fuente(codigo):
                 if codigo[i] == '.':
                     # Verificar que haya al menos un dígito después del punto
                     if i + 1 < longitud and codigo[i + 1].isdigit():
-                        tiene_punto = True
                         lexema += codigo[i]
+                        tiene_punto = True
                         i += 1
                         columna += 1
                     else:
+                        lexema += codigo[i]
                         notValidNumber = True
                         break  # No es un número válido, salir del bucle
                 lexema += codigo[i]
                 i += 1
                 columna += 1
-            tipo = "NUM_FLOTANTE" if tiene_punto else "NUM_ENTERO"
+            if notValidNumber: tipo="ERROR"
+            else: tipo = "NUM_FLOTANTE" if tiene_punto else "NUM_ENTERO"
             tokens.append({"lexema": lexema, "tipo": tipo, "linea": fila, "columna": inicio_col})
             continue
 
@@ -167,6 +169,8 @@ def analizar_codigo_fuente(codigo):
             notValidNumber =False
         else:
             errores.append({"linea": fila, "columna": columna, "descripcion": f"Carácter no reconocido: '{c}'", "valor": c})
+            tipo = "ERROR"
+            tokens.append({"lexema": c, "tipo": tipo, "linea": fila, "columna": columna})
         i += 1
         columna += 1
 

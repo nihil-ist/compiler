@@ -93,6 +93,8 @@ class CodeEditor(QPlainTextEdit):
                 "OP_LOGICO": fmt("#FF6188"),
                 "ASIGNACION": fmt("#FF6188"),
                 "DELIMITADOR": fmt("#727072"),
+                "ERROR": fmt("FF0000"),
+                
             }
 
         def highlightBlock(self, text):
