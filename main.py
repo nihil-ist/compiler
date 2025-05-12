@@ -101,13 +101,19 @@ class CodeEditor(QPlainTextEdit):
                 lexema = token["lexema"]
                 tipo = token["tipo"]
                 formato = self.token_format_map.get(tipo, QTextCharFormat())
-                
-                pattern = QRegExp(r'\b' + QRegExp.escape(lexema) + r'\b')
+
+                # Si el lexema es un símbolo, no usar \b
+                if lexema.isalnum() or lexema == "_":
+                    pattern = QRegExp(r'\b' + QRegExp.escape(lexema) + r'\b')
+                else:
+                    pattern = QRegExp(QRegExp.escape(lexema))
+
                 index = pattern.indexIn(text, 0)
                 while index >= 0:
                     length = len(lexema)
                     self.setFormat(index, length, formato)
                     index = pattern.indexIn(text, index + length)
+
 
 
     def __init__(self, status_bar):
