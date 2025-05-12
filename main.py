@@ -75,30 +75,32 @@ class CodeEditor(QPlainTextEdit):
             self.token_format_map = self.create_format_map()
 
         def create_format_map(self):
-            def fmt(color, bold=False):
+            def fmt(color, bold=False, underline=False):
                 f = QTextCharFormat()
                 f.setForeground(QColor(color))
                 if bold:
                     f.setFontWeight(QFont.Bold)
+                if underline:
+                    f.setUnderlineStyle(QTextCharFormat.WaveUnderline)
+                    f.setUnderlineColor(QColor(color))
                 return f
 
             return {
-                "IDENTIFICADOR": fmt("#FFD866"),
+                "IDENTIFICADOR": fmt("#FCFCFA"),
                 "RESERVADA": fmt("#FF6188", bold=True),
                 "NUM_ENTERO": fmt("#AB9DF2"),
-                "NUM_FLOTANTE": fmt("#AB9DF2"), 
+                "NUM_FLOTANTE": fmt("#AB9DF2"),
                 "COMENTARIO": fmt("#727072"),
                 "OP_ARITMETICO": fmt("#FF6188"),
-                "OP_RELACIONAL": fmt("#FD9353"), 
-                "OP_LOGICO": fmt("#FD9353"), 
+                "OP_RELACIONAL": fmt("#FFD866"),
+                "OP_LOGICO": fmt("#FFD866"),
                 "ASIGNACION": fmt("#FF6188"),
-                "DELIMITADOR": fmt("#FF6188"), 
-                "ERROR": fmt("#78dce8", bold=True), 
-
+                "DELIMITADOR": fmt("#FD9353"),
+                "ERROR": fmt("#A9DC76", bold=True, underline=True),        
             }
 
         def highlightBlock(self, text):
-            tokens, errores = self.lexer_func(text) 
+            tokens, _ = self.lexer_func(text)
             for token in tokens:
                 lexema = token["lexema"]
                 tipo = token["tipo"]
@@ -115,15 +117,6 @@ class CodeEditor(QPlainTextEdit):
                     length = len(lexema)
                     self.setFormat(index, length, formato)
                     index = pattern.indexIn(text, index + length)
-            
-            for error in errores: 
-                lexema = error["valor"] 
-                formato = self.token_format_map.get("ERROR", QTextCharFormat()) 
-                pattern = QRegExp(QRegExp.escape(lexema)) 
-                index = pattern.indexIn(text, 0) 
-                while index >= 0: 
-                    self.setFormat(index, len(lexema), formato) 
-                    index = pattern.indexIn(text, index + len(lexema)) 
 
 
 
