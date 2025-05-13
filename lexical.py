@@ -101,7 +101,7 @@ def analizar_codigo_fuente(codigo):
             continue
 
         # Números (enteros o flotantes)
-        if c.isdigit() or (c == '-' and i + 1 < longitud and codigo[i + 1].isdigit()):
+        if c.isdigit():
             inicio_col = columna
             lexema = c
             i += 1
