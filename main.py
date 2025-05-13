@@ -100,13 +100,15 @@ class CodeEditor(QPlainTextEdit):
             }
 
         def highlightBlock(self, text):
+            self.setCurrentBlockState(0)
+
+            # Pintar tokens normales
             tokens, _ = self.lexer_func(text)
             for token in tokens:
                 lexema = token["lexema"]
                 tipo = token["tipo"]
                 formato = self.token_format_map.get(tipo, QTextCharFormat())
 
-                # Si el lexema es un símbolo, no usar \b
                 if lexema.isalnum() or lexema == "_":
                     pattern = QRegExp(r'\b' + QRegExp.escape(lexema) + r'\b')
                 else:
@@ -117,6 +119,42 @@ class CodeEditor(QPlainTextEdit):
                     length = len(lexema)
                     self.setFormat(index, length, formato)
                     index = pattern.indexIn(text, index + length)
+
+            # Comentarios multilínea
+            comment_format = self.token_format_map.get("COMENTARIO", QTextCharFormat())
+            start_tag = "/*"
+            end_tag = "*/"
+
+            if self.previousBlockState() == 1:
+                # Estamos dentro de un comentario que viene de la línea anterior
+                start = 0
+                end = text.find(end_tag)
+                if end == -1:
+                    self.setFormat(0, len(text), comment_format)
+                    self.setCurrentBlockState(1)
+                    return
+                else:
+                    self.setFormat(0, end + 2, comment_format)
+                    self.setCurrentBlockState(0)
+                    return
+
+            # Buscamos si este bloque abre un comentario
+            start = text.find(start_tag)
+            while start >= 0:
+                end = text.find(end_tag, start + 2)
+                if end == -1:
+                    self.setFormat(start, len(text) - start, comment_format)
+                    self.setCurrentBlockState(1)
+                    return
+                else:
+                    length = end + 2 - start
+                    self.setFormat(start, length, comment_format)
+                    start = text.find(start_tag, end + 2)
+
+            # Si no hay comentarios abiertos, asegúrate de resetear el estado
+            self.setCurrentBlockState(0)
+
+
 
 
 

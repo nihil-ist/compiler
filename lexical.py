@@ -181,7 +181,7 @@ def generar_tabla_tokens(tokens):
     tabla += "-" * 50 + "\n"
     for t in tokens:
         # if (t['tipo'] != "ERROR"):
-        if (t['tipo'] != "ERROR" or t['tipo'] != "COMENTARIO"):
+        if t['tipo'] not in ("ERROR", "COMENTARIO"):
             tabla += f"{t['lexema']}\t\t{t['tipo']}\t\t{t['linea']}\t{t['columna']}\n"
     return tabla
 
