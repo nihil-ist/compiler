@@ -1,5 +1,6 @@
 import sys
 from lexical import analizar_codigo_fuente, generar_tabla_tokens, generar_tabla_errores
+from syntactic import analizar_sintacticamente, generar_tabla_errores_sintacticos
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QAction, QFileDialog, QStatusBar, QTabWidget, QWidget,
     QVBoxLayout, QHBoxLayout, QPlainTextEdit, QMessageBox, QSplitter, QToolBar
@@ -7,7 +8,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
 from PyQt5.QtSvg import QSvgRenderer
 from PyQt5.QtCore import Qt, QRegExp
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QTreeWidget, QTreeWidgetItem
 from PyQt5.QtGui import QPainter, QColor, QSyntaxHighlighter, QTextCharFormat
 
 
@@ -96,6 +97,7 @@ class CodeEditor(QPlainTextEdit):
                 "OP_LOGICO": fmt("#FFD866"),
                 "ASIGNACION": fmt("#FF6188"),
                 "DELIMITADOR": fmt("#FD9353"),
+                "CADENA": fmt("#A9DC76"),
                 "ERROR": fmt("#A9DC76", bold=True, underline=True),        
             }
 
@@ -247,6 +249,34 @@ class IDECompilador(QMainWindow):
         self.lexical_analysis_box.setPlainText(generar_tabla_tokens(tokens))
         self.lexical_errors_box.setPlainText(generar_tabla_errores(errores))
 
+    def run_syntactic_analysis(self):
+        current_widget = self.editor_tabs.currentWidget()
+        if not current_widget:
+            return
+        text_edit = current_widget.findChild(CodeEditor)
+        if not text_edit:
+            return
+        source_code = text_edit.toPlainText()
+        tokens, _ = analizar_codigo_fuente(source_code)
+        ast, errores = analizar_sintacticamente(tokens)
+        
+        # Mostrar AST en la pestaña de texto
+        if ast:
+            self.syntax_analysis_box.setPlainText(str(ast))
+        
+        # Mostrar AST gráficamente
+        self.ast_tree.clear()
+        self.populate_tree(ast, self.ast_tree.invisibleRootItem())
+        
+        # Mostrar errores
+        self.syntax_errors_box.setPlainText(generar_tabla_errores_sintacticos(errores))
+
+    def populate_tree(self, nodo, parent):
+        item = QTreeWidgetItem(parent)
+        item.setText(0, nodo.tipo)
+        item.setText(1, nodo.valor if nodo.valor else "")
+        for hijo in nodo.hijos:
+            self.populate_tree(hijo, item)
 
     def initUI(self):
         main_splitter = QSplitter(Qt.Vertical)
@@ -274,7 +304,17 @@ class IDECompilador(QMainWindow):
         self.lexical_analysis_box.setReadOnly(True)
         self.lexical_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.analysis_tabs.addTab(self.lexical_analysis_box, "Análisis Léxico")
-        self.analysis_tabs.addTab(QWidget(), "Análisis Sintáctico")
+
+        self.ast_tree = QTreeWidget()
+        self.ast_tree.setHeaderLabels(["Nodo", "Valor"])
+        self.ast_tree.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.analysis_tabs.insertTab(2, self.ast_tree, "Árbol Sintáctico")
+
+        self.syntax_analysis_box = QPlainTextEdit()
+        self.syntax_analysis_box.setReadOnly(True)
+        self.syntax_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.analysis_tabs.addTab(self.syntax_analysis_box, "Análisis Sintáctico")
+
         self.analysis_tabs.addTab(QWidget(), "Análisis Semántico")
         self.analysis_tabs.addTab(QWidget(), "Código Intermedio")
         self.analysis_tabs.addTab(QWidget(), "Tabla Hash")
@@ -295,7 +335,13 @@ class IDECompilador(QMainWindow):
         """)
 
         self.lexical_errors = QWidget()
-        self.syntax_errors = QWidget()
+
+        self.syntax_errors_box = QPlainTextEdit()
+        self.syntax_errors_box.setReadOnly(True)
+        self.syntax_errors_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        error_tabs.insertTab(1, self.syntax_errors_box, "Errores Sintácticos")
+        self.syntax_errors = QWidget()  # oculto
+
         self.semantic_errors = QWidget()
         self.results = QWidget()
 
@@ -327,12 +373,16 @@ class IDECompilador(QMainWindow):
         compile_semantic = QAction(load_svg_icon("assets/play.svg"), "Compilar semántica", self)
         
         compile_menu.addAction(compile_semantic)
+
         compile_lexic = QAction(load_svg_icon("assets/play.svg"), "Compilar léxico", self)
         compile_lexic.triggered.connect(self.run_lexical_analysis)
-
         compile_menu.addAction(compile_lexic)
+
         compile_sintactic = QAction(load_svg_icon("assets/play.svg"), "Compilar sintáctica", self)
-        
+        compile_sintactic.triggered.connect(self.run_syntactic_analysis)
+        compile_menu.addAction(compile_sintactic)
+
+
         compile_menu.addAction(compile_sintactic)
         new_action = QAction(load_svg_icon("assets/file-circle-plus.svg"), "Nuevo", self)
         new_action.triggered.connect(self.create_new_file)

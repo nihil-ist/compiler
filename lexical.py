@@ -2,7 +2,7 @@
 
 RESERVADAS = {
     "if", "else", "end", "do", "while", "then", "until", "switch", "case",
-    "int", "float", "main", "cin", "cout"
+    "int", "float", "main", "cin", "cout", "true", "false"
 }
 
 OPERADORES = {
@@ -99,6 +99,27 @@ def analizar_codigo_fuente(codigo):
             else:
                 errores.append({"linea": fila, "columna": inicio_col, "descripcion": "Comentario multilínea no cerrado", "valor": lexema})
             continue
+
+
+        # Dentro del bucle while i < longitud:
+        if c == '"':
+            inicio_col = columna
+            lexema = c
+            i += 1
+            columna += 1
+            while i < longitud and codigo[i] != '"':
+                lexema += codigo[i]
+                i += 1
+                columna += 1
+            if i < longitud:
+                lexema += codigo[i]
+                i += 1
+                columna += 1
+                tokens.append({"lexema": lexema, "tipo": "CADENA", "linea": fila, "columna": inicio_col})
+            else:
+                errores.append({"linea": fila, "columna": inicio_col, "descripcion": "Cadena no cerrada", "valor": lexema})
+            continue
+
 
         # Números (enteros o flotantes)
         if c.isdigit():
