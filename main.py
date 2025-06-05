@@ -3,14 +3,13 @@ from lexical import analizar_codigo_fuente, generar_tabla_tokens, generar_tabla_
 from syntactic import analizar_sintacticamente, generar_tabla_errores_sintacticos
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QAction, QFileDialog, QStatusBar, QTabWidget, QWidget,
-    QVBoxLayout, QHBoxLayout, QPlainTextEdit, QMessageBox, QSplitter, QToolBar
+    QVBoxLayout, QHBoxLayout, QPlainTextEdit, QMessageBox, QSplitter, QToolBar, QTreeWidget, QTreeWidgetItem
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
 from PyQt5.QtSvg import QSvgRenderer
 from PyQt5.QtCore import Qt, QRegExp
-from PyQt5.QtWidgets import QWidget, QTreeWidget, QTreeWidgetItem
+from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QColor, QSyntaxHighlighter, QTextCharFormat
-
 
 def load_svg_icon(path, color=Qt.white):
     renderer = QSvgRenderer(path)
@@ -98,6 +97,7 @@ class CodeEditor(QPlainTextEdit):
                 "ASIGNACION": fmt("#FF6188"),
                 "DELIMITADOR": fmt("#FD9353"),
                 "CADENA": fmt("#A9DC76"),
+                "OP_ENTRADA_SALIDA": fmt("#78DCE8"),  # Color cian para << y >>
                 "ERROR": fmt("#A9DC76", bold=True, underline=True),        
             }
 
@@ -156,10 +156,6 @@ class CodeEditor(QPlainTextEdit):
             # Si no hay comentarios abiertos, asegúrate de resetear el estado
             self.setCurrentBlockState(0)
 
-
-
-
-
     def __init__(self, status_bar):
         super().__init__()
         self.setFont(QFont("consolas", 12))  
@@ -183,7 +179,6 @@ class CodeEditor(QPlainTextEdit):
 
     def reset_modified(self):
         self.is_modified = False
-
 
 class IDECompilador(QMainWindow):
     
@@ -232,6 +227,10 @@ class IDECompilador(QMainWindow):
                 background-color: #727072;
                 color: #ffffff;
             }
+            QTreeWidget {
+                background-color: #2d2a2e;
+                color: #ffffff;
+            }
         """)
 
     def run_lexical_analysis(self):
@@ -258,7 +257,10 @@ class IDECompilador(QMainWindow):
             return
         source_code = text_edit.toPlainText()
         tokens, _ = analizar_codigo_fuente(source_code)
-        ast, errores = analizar_sintacticamente(tokens)
+        # Filtrar tokens COMENTARIO y ERROR
+        filtered_tokens = [t for t in tokens if t["tipo"] not in ("COMENTARIO", "ERROR")]
+        print("Tokens filtrados:", filtered_tokens)
+        ast, errores = analizar_sintacticamente(filtered_tokens)
         
         # Mostrar AST en la pestaña de texto
         if ast:
@@ -305,10 +307,28 @@ class IDECompilador(QMainWindow):
         self.lexical_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.analysis_tabs.addTab(self.lexical_analysis_box, "Análisis Léxico")
 
+        # MODIFICACIÓN: Contenedor para el árbol sintáctico con barra de herramientas
+        ast_widget = QWidget()
+        ast_layout = QVBoxLayout()
+        ast_toolbar = QToolBar()
+        ast_toolbar.setStyleSheet("background-color: #2d2a2e; padding: 5px;")
+
+        expand_action = QAction(load_svg_icon("assets/expand.svg"), "Expandir Todo", self)
+        expand_action.triggered.connect(self.expand_all)
+        ast_toolbar.addAction(expand_action)
+        
+        collapse_action = QAction(load_svg_icon("assets/collapse.svg"), "Colapsar Todo", self)
+        collapse_action.triggered.connect(self.collapse_all)
+        ast_toolbar.addAction(collapse_action)
+
         self.ast_tree = QTreeWidget()
         self.ast_tree.setHeaderLabels(["Nodo", "Valor"])
         self.ast_tree.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
-        self.analysis_tabs.insertTab(2, self.ast_tree, "Árbol Sintáctico")
+        ast_layout.addWidget(ast_toolbar)
+        ast_layout.addWidget(self.ast_tree)
+        ast_widget.setLayout(ast_layout)
+        self.analysis_tabs.addTab(ast_widget, "Árbol Sintáctico")
+        # FIN MODIFICACIÓN
 
         self.syntax_analysis_box = QPlainTextEdit()
         self.syntax_analysis_box.setReadOnly(True)
@@ -381,7 +401,6 @@ class IDECompilador(QMainWindow):
         compile_sintactic = QAction(load_svg_icon("assets/play.svg"), "Compilar sintáctica", self)
         compile_sintactic.triggered.connect(self.run_syntactic_analysis)
         compile_menu.addAction(compile_sintactic)
-
 
         compile_menu.addAction(compile_sintactic)
         new_action = QAction(load_svg_icon("assets/file-circle-plus.svg"), "Nuevo", self)
@@ -502,8 +521,14 @@ class IDECompilador(QMainWindow):
             self.setWindowTitle(f"Compilador - {self.editor_tabs.tabText(index)}")
         else:
             self.setWindowTitle("Compilador - IDE")
-    
-    
+
+    # MODIFICACIÓN: Métodos para expandir y colapsar el árbol
+    def expand_all(self):
+        self.ast_tree.expandAll()
+
+    def collapse_all(self):
+        self.ast_tree.collapseAll()
+    # FIN MODIFICACIÓN
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

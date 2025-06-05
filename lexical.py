@@ -2,7 +2,7 @@
 
 RESERVADAS = {
     "if", "else", "end", "do", "while", "then", "until", "switch", "case",
-    "int", "float", "main", "cin", "cout", "true", "false"
+    "int", "float", "main", "cin", "cout", "true", "false", "bool"
 }
 
 OPERADORES = {
@@ -23,7 +23,9 @@ OPERADORES = {
     "!": "OP_LOGICO",
     "=": "ASIGNACION",
     "++": "ASIGNACION",
-    "--": "ASIGNACION"
+    "--": "ASIGNACION",
+    "<<": "OP_ENTRADA_SALIDA",
+    ">>": "OP_ENTRADA_SALIDA"
 }
 
 DELIMITADORES = {"(", ")", "{", "}", ",", ";"}
@@ -120,6 +122,25 @@ def analizar_codigo_fuente(codigo):
                 errores.append({"linea": fila, "columna": inicio_col, "descripcion": "Cadena no cerrada", "valor": lexema})
             continue
 
+
+        # Dentro del bucle while i < longitud en analizar_codigo_fuente
+        if i + 1 < longitud and codigo[i:i+2] in ("<<", ">>"):
+            lexema = codigo[i:i+2]
+            tokens.append({"lexema": lexema, "tipo": "OP_ENTRADA_SALIDA", "linea": fila, "columna": columna})
+            i += 2
+            columna += 2
+            continue
+        elif codigo[i] in ("<", ">", "=", "!"):
+            lexema = codigo[i]
+            i += 1
+            columna += 1
+            if i < longitud and codigo[i] in ("=", ">"):
+                lexema += codigo[i]
+                i += 1
+                columna += 1
+            tipo = "OP_RELACIONAL" if lexema in ("<", ">", "<=", ">=", "==", "!=") else "ASIGNACION"
+            tokens.append({"lexema": lexema, "tipo": tipo, "linea": fila, "columna": columna - len(lexema)})
+            continue
 
         # Números (enteros o flotantes)
         if c.isdigit():
