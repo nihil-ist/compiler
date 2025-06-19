@@ -1,16 +1,22 @@
 # syntactic.py
 
 class NodoAST:
-    def __init__(self, tipo, valor=None):
+    def __init__(self, tipo, valor=None, linea=None, columna=None, gramatica=None):
         self.tipo = tipo
         self.valor = valor
+        self.linea = linea
+        self.columna = columna
+        self.gramatica = gramatica
         self.hijos = []
 
     def agregar_hijo(self, nodo):
         self.hijos.append(nodo)
 
     def __str__(self, nivel=0):
-        resultado = "  " * nivel + f"{self.tipo}: {self.valor if self.valor else ''}\n"
+        indent = "  " * nivel
+        posicion = f" (línea: {self.linea}, columna: {self.columna})" if self.linea and self.columna else ""
+        grama = f" [{self.gramatica}]" if self.gramatica else ""
+        resultado = f"{indent}{self.tipo}: {self.valor if self.valor else ''}{posicion}{grama}\n"
         for hijo in self.hijos:
             resultado += hijo.__str__(nivel + 1)
         return resultado
@@ -27,6 +33,9 @@ class Parser:
     def avanzar(self):
         self.pos += 1
 
+    def crear_nodo_token(self, token, tipo=None, gramatica=None):
+        return NodoAST(tipo or token["tipo"], token["lexema"], token["linea"], token["columna"], gramatica)
+
     def coincidir(self, tipo_esperado, lexema_esperado=None):
         actual = self.token_actual()
         if actual and actual["tipo"] == tipo_esperado and (lexema_esperado is None or actual["lexema"] == lexema_esperado):
@@ -36,7 +45,7 @@ class Parser:
             if actual:
                 mensaje = f"Se esperaba '{lexema_esperado or tipo_esperado}' pero se encontró '{actual['lexema']}' ({actual['tipo']}) en línea {actual['linea']}, columna {actual['columna']}"
                 self.errores.append(mensaje)
-                sincronizadores = {";", "}", "end", "while", "do", "if", "else", "cin", "cout", "then", "main", "int", "float", "bool"}
+                sincronizadores = {";", "}", "end", "while", "do", "if", "else", "cin", "cout", "then", "main", "int", "float", "bool", "until"}
                 while actual and actual["lexema"] not in sincronizadores:
                     self.avanzar()
                     actual = self.token_actual()
@@ -51,43 +60,41 @@ class Parser:
         return ast, self.errores
 
     def programa(self):
-        nodo = NodoAST("programa")
-        if not self.coincidir("RESERVADA", "main"):
+        nodo = NodoAST("programa", gramatica="programa")
+        token_main = self.coincidir("RESERVADA", "main")
+        if not token_main:
             return nodo
-        nodo.agregar_hijo(NodoAST("main", "main"))
+        nodo.agregar_hijo(self.crear_nodo_token(token_main, "main", "programa"))
 
-        if not self.coincidir("DELIMITADOR", "{"):
+        token_llave_abrir = self.coincidir("DELIMITADOR", "{")
+        if not token_llave_abrir:
             return nodo
-        nodo.agregar_hijo(NodoAST("{", "{"))
+        nodo.agregar_hijo(self.crear_nodo_token(token_llave_abrir, "{", "programa"))
 
         declaraciones = self.lista_declaracion()
         if declaraciones:
             nodo.agregar_hijo(declaraciones)
 
-        if not self.coincidir("DELIMITADOR", "}"):
+        token_llave_cerrar = self.coincidir("DELIMITADOR", "}")
+        if not token_llave_cerrar:
             return nodo
-        nodo.agregar_hijo(NodoAST("}", "}"))
-
+        nodo.agregar_hijo(self.crear_nodo_token(token_llave_cerrar, "}", "programa"))
         return nodo
 
     def lista_declaracion(self):
-        print("Iniciando lista_declaracion, token actual:", self.token_actual())
-        nodo = NodoAST("lista_declaracion")
-        actual = self.token_actual()
-        while actual and actual["lexema"] != "}":
-            if actual["tipo"] == "RESERVADA" and actual["lexema"] in ("int", "float", "bool"):
-                decl = self.declaracion_variable()
-                if decl:
-                    nodo.agregar_hijo(decl)
-            elif actual["tipo"] == "IDENTIFICADOR" or (actual["tipo"] == "RESERVADA" and actual["lexema"] in ("if", "while", "do", "cin", "cout")):
-                sent = self.sentencia()
-                if sent:
-                    nodo.agregar_hijo(sent)
-            else:
-                self.errores.append(f"Token inesperado '{actual['lexema']}' en línea {actual['linea']}, columna {actual['columna']}")
-                self.avanzar()  # Avanzar para evitar bucles infinitos
+        nodo = NodoAST("lista_declaracion", gramatica="lista_declaracion")
+        while True:
             actual = self.token_actual()
-        print("Fin de lista_declaracion, token actual:", self.token_actual())
+            if not actual or actual["lexema"] == "}":
+                break
+            if actual["tipo"] == "RESERVADA" and actual["lexema"] in ("int", "float", "bool"):
+                hijo = self.declaracion_variable()
+            else:
+                hijo = self.sentencia()
+            if hijo:
+                nodo.agregar_hijo(hijo)
+            else:
+                break
         return nodo
 
     def declaracion(self):
@@ -101,29 +108,28 @@ class Parser:
         return None
 
     def declaracion_variable(self):
-        nodo = NodoAST("declaracion_variable")
+        nodo = NodoAST("declaracion_variable", gramatica="declaracion_variable")
         tipo = self.coincidir("RESERVADA")
         if not tipo:
             return nodo
-        nodo.agregar_hijo(NodoAST("tipo", tipo["lexema"]))
+        nodo.agregar_hijo(self.crear_nodo_token(tipo, "tipo", "tipo"))
 
         id_token = self.coincidir("IDENTIFICADOR")
         if not id_token:
             return nodo
-        nodo.agregar_hijo(NodoAST("identificador", id_token["lexema"]))
+        nodo.agregar_hijo(self.crear_nodo_token(id_token, "identificador", "identificador"))
 
         while self.token_actual() and self.token_actual()["lexema"] == ",":
-            self.avanzar()
-            coma_node = NodoAST("coma", ",")
+            coma_token = self.coincidir("DELIMITADOR", ",")
+            nodo_coma = self.crear_nodo_token(coma_token, "coma", "identificador")
             siguiente_id = self.coincidir("IDENTIFICADOR")
             if siguiente_id:
-                coma_node.agregar_hijo(NodoAST("identificador", siguiente_id["lexema"]))
-                nodo.agregar_hijo(coma_node)
+                nodo_coma.agregar_hijo(self.crear_nodo_token(siguiente_id, "identificador", "identificador"))
+                nodo.agregar_hijo(nodo_coma)
 
-        if not self.coincidir("DELIMITADOR", ";"):
-            return nodo
-        nodo.agregar_hijo(NodoAST(";", ";"))
-
+        fin = self.coincidir("DELIMITADOR", ";")
+        if fin:
+            nodo.agregar_hijo(self.crear_nodo_token(fin, ";", "declaracion_variable"))
         return nodo
 
     def sentencia(self):
@@ -146,180 +152,101 @@ class Parser:
         return None
 
     def seleccion(self):
-        print("Iniciando seleccion, token actual:", self.token_actual())
-        nodo = NodoAST("seleccion")
-        if not self.coincidir("RESERVADA", "if"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("if"))
-
+        nodo = NodoAST("seleccion", gramatica="seleccion")
+        si = self.coincidir("RESERVADA", "if")
+        if si:
+            nodo.agregar_hijo(self.crear_nodo_token(si, "if", "seleccion"))
         expr = self.expresion()
         if expr:
             nodo.agregar_hijo(expr)
-
-        if not self.coincidir("RESERVADA", "then"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("then"))
-
-        if self.token_actual() and self.token_actual()["lexema"] == "{":
-            self.coincidir("DELIMITADOR", "{")
-            nodo.agregar_hijo(NodoAST("{", "{"))
-            cuerpo_then = self.lista_sentencias()
-            if cuerpo_then:
-                nodo.agregar_hijo(cuerpo_then)
-            if not self.coincidir("DELIMITADOR", "}"):
-                return nodo
-            nodo.agregar_hijo(NodoAST("}", "}"))
-        else:
-            cuerpo_then = self.lista_sentencias()
-            if cuerpo_then:
-                nodo.agregar_hijo(cuerpo_then)
-
-        if self.token_actual() and self.token_actual()["lexema"] == "else":
-            self.avanzar()
-            nodo.agregar_hijo(NodoAST("else"))
-            if self.token_actual() and self.token_actual()["lexema"] == "{":
-                self.coincidir("DELIMITADOR", "{")
-                nodo.agregar_hijo(NodoAST("{", "{"))
+        entonces = self.coincidir("RESERVADA", "then")
+        if entonces:
+            nodo.agregar_hijo(self.crear_nodo_token(entonces, "then", "seleccion"))
+        cuerpo_then = self.lista_sentencias()
+        if cuerpo_then:
+            nodo.agregar_hijo(cuerpo_then)
+        actual = self.token_actual()
+        if actual and actual["lexema"] == "else":
+            sino = self.coincidir("RESERVADA", "else")
+            if sino:
+                nodo.agregar_hijo(self.crear_nodo_token(sino, "else", "seleccion"))
                 cuerpo_else = self.lista_sentencias()
                 if cuerpo_else:
                     nodo.agregar_hijo(cuerpo_else)
-                if not self.coincidir("DELIMITADOR", "}"):
-                    return nodo
-                nodo.agregar_hijo(NodoAST("}", "}"))
-            else:
-                cuerpo_else = self.lista_sentencias()
-                if cuerpo_else:
-                    nodo.agregar_hijo(cuerpo_else)
-
-        if not self.coincidir("RESERVADA", "end"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("end"))
-
-        if not self.coincidir("DELIMITADOR", ";"):
-            return nodo
-        nodo.agregar_hijo(NodoAST(";", ";"))
-
-        print("Fin de seleccion, token actual:", self.token_actual())
+        fin = self.coincidir("RESERVADA", "end")
+        if fin:
+            nodo.agregar_hijo(self.crear_nodo_token(fin, "end", "seleccion"))
         return nodo
 
     def iteracion(self):
-        print("Iniciando iteracion, token actual:", self.token_actual())
-        nodo = NodoAST("iteracion")
-        if not self.coincidir("RESERVADA", "while"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("while"))
-
+        nodo = NodoAST("iteracion", gramatica="iteracion")
+        mientras = self.coincidir("RESERVADA", "while")
+        if mientras:
+            nodo.agregar_hijo(self.crear_nodo_token(mientras, "while", "iteracion"))
         expr = self.expresion()
         if expr:
             nodo.agregar_hijo(expr)
-
-        if self.token_actual() and self.token_actual()["lexema"] == "{":
-            self.coincidir("DELIMITADOR", "{")
-            nodo.agregar_hijo(NodoAST("{", "{"))
-            sent_list = self.lista_sentencias()
-            if sent_list:
-                nodo.agregar_hijo(sent_list)
-            if not self.coincidir("DELIMITADOR", "}"):
-                return nodo
-            nodo.agregar_hijo(NodoAST("}", "}"))
-        else:
-            sent_list = self.lista_sentencias()
-            if sent_list:
-                nodo.agregar_hijo(sent_list)
-            if not self.coincidir("RESERVADA", "end"):
-                return nodo
-            nodo.agregar_hijo(NodoAST("end"))
-            if not self.coincidir("DELIMITADOR", ";"):
-                return nodo
-            nodo.agregar_hijo(NodoAST(";", ";"))
-
-        print("Fin de iteracion, token actual:", self.token_actual())
+        cuerpo = self.lista_sentencias()
+        if cuerpo:
+            nodo.agregar_hijo(cuerpo)
+        fin = self.coincidir("RESERVADA", "end")
+        if fin:
+            nodo.agregar_hijo(self.crear_nodo_token(fin, "end", "iteracion"))
         return nodo
 
     def repeticion(self):
-        print("Iniciando repeticion, token actual:", self.token_actual())
-        nodo = NodoAST("repeticion")
-        if not self.coincidir("RESERVADA", "do"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("do"))
-
-        if self.token_actual() and self.token_actual()["lexema"] == "{":
-            self.coincidir("DELIMITADOR", "{")
-            nodo.agregar_hijo(NodoAST("{", "{"))
-            sent_list = self.lista_sentencias()
-            if sent_list:
-                nodo.agregar_hijo(sent_list)
-            if not self.coincidir("DELIMITADOR", "}"):
-                self.errores.append(f"Se esperaba '}}' pero se encontró '{self.token_actual()['lexema']}' en línea {self.token_actual()['linea']}, columna {self.token_actual()['columna']}")
-                return nodo
-            nodo.agregar_hijo(NodoAST("}", "}"))
-        else:
-            sent_list = self.lista_sentencias()
-            if sent_list:
-                nodo.agregar_hijo(sent_list)
-
-        if not self.coincidir("RESERVADA", "while"):
-            self.errores.append(f"Se esperaba 'while' pero se encontró '{self.token_actual()['lexema']}' en línea {self.token_actual()['linea']}, columna {self.token_actual()['columna']}")
-            return nodo
-        nodo.agregar_hijo(NodoAST("while"))
-
-        if not self.coincidir("DELIMITADOR", "("):
-            return nodo
-        nodo.agregar_hijo(NodoAST("(", "("))
-
-        expr = self.expresion()  # Procesar la expresión completa, incluyendo < 20.0
+        nodo = NodoAST("repeticion", gramatica="repeticion")
+        hacer = self.coincidir("RESERVADA", "do")
+        if hacer:
+            nodo.agregar_hijo(self.crear_nodo_token(hacer, "do", "repeticion"))
+        cuerpo = self.lista_sentencias()
+        if cuerpo:
+            nodo.agregar_hijo(cuerpo)
+        hasta = self.coincidir("RESERVADA", "until")
+        if hasta:
+            nodo.agregar_hijo(self.crear_nodo_token(hasta, "until", "repeticion"))
+        expr = self.expresion()
         if expr:
             nodo.agregar_hijo(expr)
-
-        if not self.coincidir("DELIMITADOR", ")"):
-            self.errores.append(f"Se esperaba ')' pero se encontró '{self.token_actual()['lexema']}' en línea {self.token_actual()['linea']}, columna {self.token_actual()['columna']}")
-            return nodo
-        nodo.agregar_hijo(NodoAST(")", ")"))
-
-        if not self.coincidir("DELIMITADOR", ";"):
-            self.errores.append(f"Se esperaba ';' pero se encontró '{self.token_actual()['lexema']}' en línea {self.token_actual()['linea']}, columna {self.token_actual()['columna']}")
-            return nodo
-        nodo.agregar_hijo(NodoAST(";", ";"))
-
-        print("Fin de repeticion, token actual:", self.token_actual())
         return nodo
 
     def sent_in(self):
-        nodo = NodoAST("sent_in")
-        if not self.coincidir("RESERVADA", "cin"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("cin"))
-
-        if not self.coincidir("OP_ENTRADA_SALIDA", ">>"):
-            return nodo
-        nodo.agregar_hijo(NodoAST(">>", ">>"))
-
-        id_token = self.coincidir("IDENTIFICADOR")
-        if id_token:
-            nodo.agregar_hijo(NodoAST("id", id_token["lexema"]))
-
-        if not self.coincidir("DELIMITADOR", ";"):
-            return nodo
-        nodo.agregar_hijo(NodoAST(";", ";"))
-
+        nodo = NodoAST("sent_in", gramatica="sent_in")
+        cin = self.coincidir("RESERVADA", "cin")
+        if cin:
+            nodo.agregar_hijo(self.crear_nodo_token(cin, "cin", "sent_in"))
+        flecha = self.coincidir("OP_ENTRADA_SALIDA", ">>")
+        if flecha:
+            nodo.agregar_hijo(self.crear_nodo_token(flecha, ">>", "sent_in"))
+        identificador = self.coincidir("IDENTIFICADOR")
+        if identificador:
+            nodo.agregar_hijo(self.crear_nodo_token(identificador, "id", "sent_in"))
+        fin = self.coincidir("DELIMITADOR", ";")
+        if fin:
+            nodo.agregar_hijo(self.crear_nodo_token(fin, ";", "sent_in"))
         return nodo
 
     def sent_out(self):
-        print("Iniciando sent_out, token actual:", self.token_actual())
-        nodo = NodoAST("sent_out")
-        if not self.coincidir("RESERVADA", "cout"):
-            return nodo
-        nodo.agregar_hijo(NodoAST("cout"))
-
-        salida = self.salida()
-        if salida:
-            nodo.agregar_hijo(salida)
-
-        if not self.coincidir("DELIMITADOR", ";"):
-            return nodo
-        nodo.agregar_hijo(NodoAST(";", ";"))
-
-        print("Fin de sent_out, token actual:", self.token_actual())
+        nodo = NodoAST("sent_out", gramatica="sent_out")
+        cout = self.coincidir("RESERVADA", "cout")
+        if cout:
+            nodo.agregar_hijo(self.crear_nodo_token(cout, "cout", "sent_out"))
+        actual = self.token_actual()
+        while actual and actual["lexema"] == "<<":
+            op = self.coincidir("OP_ENTRADA_SALIDA", "<<")
+            nodo.agregar_hijo(self.crear_nodo_token(op, "<<", "salida"))
+            actual = self.token_actual()
+            if actual["tipo"] == "CADENA":
+                nodo.agregar_hijo(self.crear_nodo_token(actual, "cadena", "salida"))
+                self.avanzar()
+            else:
+                expr = self.expresion()
+                if expr:
+                    nodo.agregar_hijo(expr)
+            actual = self.token_actual()
+        fin = self.coincidir("DELIMITADOR", ";")
+        if fin:
+            nodo.agregar_hijo(self.crear_nodo_token(fin, ";", "sent_out"))
         return nodo
 
     def salida(self):
@@ -352,32 +279,25 @@ class Parser:
         return nodo
 
     def asignacion(self):
-        print("Iniciando asignacion, token actual:", self.token_actual())
-        nodo = NodoAST("asignacion")
+        nodo = NodoAST("asignacion", gramatica="asignacion")
         id_token = self.coincidir("IDENTIFICADOR")
         if not id_token:
             return nodo
-        nodo.agregar_hijo(NodoAST("id", id_token["lexema"]))
+        nodo.agregar_hijo(self.crear_nodo_token(id_token, "id", "asignacion"))
 
-        actual = self.token_actual()
-        if actual and actual["lexema"] in ("=", "++", "--"):
-            op = self.coincidir("ASIGNACION")
-            nodo.agregar_hijo(NodoAST(op["lexema"], op["lexema"]))
-            if op["lexema"] == "=":
-                expr = self.expresion()
-                if expr:
-                    nodo.agregar_hijo(expr)
-                if not self.coincidir("DELIMITADOR", ";"):
-                    return nodo
-                nodo.agregar_hijo(NodoAST(";", ";"))
-            else:
-                if not self.coincidir("DELIMITADOR", ";"):
-                    return nodo
-                nodo.agregar_hijo(NodoAST(";", ";"))
-        else:
-            self.errores.append(f"Se esperaba '=', '++' o '--' pero se encontró '{actual['lexema']}' en línea {actual['linea']}, columna {actual['columna']}")
+        op_token = self.coincidir("ASIGNACION")
+        if not op_token:
             return nodo
-        print("Fin de asignacion, token actual:", self.token_actual())
+        nodo.agregar_hijo(self.crear_nodo_token(op_token, op_token["lexema"], "asignacion"))
+
+        if op_token["lexema"] == "=":
+            expr = self.expresion()
+            if expr:
+                nodo.agregar_hijo(expr)
+
+        fin = self.coincidir("DELIMITADOR", ";")
+        if fin:
+            nodo.agregar_hijo(self.crear_nodo_token(fin, ";", "asignacion"))
         return nodo
 
     def sent_expresion(self):
@@ -395,127 +315,122 @@ class Parser:
         return nodo
 
     def expresion(self):
-        print("Iniciando expresion, token actual:", self.token_actual())
-        nodo = NodoAST("expresion")
-        expr_simple = self.expresion_simple()
-        if expr_simple:
-            nodo.agregar_hijo(expr_simple)
+        nodo = NodoAST("expresion", gramatica="expresion")
+        izq = self.expresion_simple()
+        if izq:
+            nodo.agregar_hijo(izq)
 
         actual = self.token_actual()
-        while actual and actual["tipo"] in ("OP_RELACIONAL", "OP_LOGICO"):
-            if actual["tipo"] == "OP_RELACIONAL":
-                op = self.coincidir("OP_RELACIONAL")
-                nodo_op = NodoAST("rel_op", op["lexema"])
-            else:
-                op = self.coincidir("OP_LOGICO")
-                nodo_op = NodoAST("log_op", op["lexema"])
-            expr_simple2 = self.expresion_simple()
-            if expr_simple2:
-                nodo_op.agregar_hijo(expr_simple2)
+        if actual and actual["tipo"] == "OP_RELACIONAL":
+            op_token = self.coincidir("OP_RELACIONAL")
+            nodo_op = self.crear_nodo_token(op_token, "rel_op", "rel_op")
+            der = self.expresion_simple()
+            if der:
+                nodo_op.agregar_hijo(der)
                 nodo.agregar_hijo(nodo_op)
-            else:
-                self.errores.append(f"Se esperaba una expresión después del operador '{op['lexema']}' en línea {op['linea']}, columna {op['columna']}")
-                break
-            actual = self.token_actual()
-        print("Fin de expresion, token actual:", self.token_actual())
         return nodo
 
     def expresion_simple(self):
-        nodo = NodoAST("expresion_simple")
+        nodo = NodoAST("expresion_simple", gramatica="expresion_simple")
         term = self.termino()
         if term:
             nodo.agregar_hijo(term)
-        while self.token_actual() and self.token_actual()["lexema"] in ("+", "-", "++", "--"):
-            op = self.coincidir("OP_ARITMETICO") or self.coincidir("ASIGNACION")
-            nodo_op = NodoAST("suma_op", op["lexema"])
-            term = self.termino()
-            if term:
-                nodo_op.agregar_hijo(term)
-                nodo.agregar_hijo(nodo_op)
+
+        while True:
+            actual = self.token_actual()
+            if actual and actual["lexema"] in ("+", "-", "++", "--"):
+                op = self.coincidir(actual["tipo"])
+                op_nodo = self.crear_nodo_token(op, "suma_op", "suma_op")
+                t = self.termino()
+                if t:
+                    op_nodo.agregar_hijo(t)
+                    nodo.agregar_hijo(op_nodo)
             else:
-                self.errores.append(f"Se esperaba un término después del operador '{op['lexema']}' en línea {op['linea']}, columna {op['columna']}")
+                break
         return nodo
 
     def termino(self):
-        nodo = NodoAST("termino")
-        factor = self.factor()
-        if factor:
-            nodo.agregar_hijo(factor)
-        while self.token_actual() and self.token_actual()["lexema"] in ("*", "/", "%"):
-            op = self.coincidir("OP_ARITMETICO")
-            nodo_op = NodoAST("mult_op", op["lexema"])
-            factor = self.factor()
-            if factor:
-                nodo_op.agregar_hijo(factor)
-                nodo.agregar_hijo(nodo_op)
+        nodo = NodoAST("termino", gramatica="termino")
+        fact = self.factor()
+        if fact:
+            nodo.agregar_hijo(fact)
+
+        while True:
+            actual = self.token_actual()
+            if actual and actual["lexema"] in ("*", "/", "%"):
+                op = self.coincidir("OP_ARITMETICO")
+                op_nodo = self.crear_nodo_token(op, "mult_op", "mult_op")
+                f = self.factor()
+                if f:
+                    op_nodo.agregar_hijo(f)
+                    nodo.agregar_hijo(op_nodo)
             else:
-                self.errores.append(f"Se esperaba un factor después del operador '{op['lexema']}' en línea {op['linea']}, columna {op['columna']}")
+                break
         return nodo
 
     def factor(self):
-        nodo = NodoAST("factor")
+        nodo = NodoAST("factor", gramatica="factor")
         comp = self.componente()
         if comp:
             nodo.agregar_hijo(comp)
-        while self.token_actual() and self.token_actual()["lexema"] == "^":
-            op = self.coincidir("OP_ARITMETICO")
-            nodo_op = NodoAST("pot_op", op["lexema"])
-            comp = self.componente()
-            if comp:
-                nodo_op.agregar_hijo(comp)
-                nodo.agregar_hijo(nodo_op)
+
+        while True:
+            actual = self.token_actual()
+            if actual and actual["lexema"] == "^":
+                op = self.coincidir("OP_ARITMETICO")
+                op_nodo = self.crear_nodo_token(op, "pot_op", "pot_op")
+                c = self.componente()
+                if c:
+                    op_nodo.agregar_hijo(c)
+                    nodo.agregar_hijo(op_nodo)
             else:
-                self.errores.append(f"Se esperaba un componente después del operador '^' en línea {op['linea']}, columna {op['columna']}")
+                break
         return nodo
         
     def componente(self):
-        print("Iniciando componente, token actual:", self.token_actual())
-        nodo = NodoAST("componente")
+        nodo = NodoAST("componente", gramatica="componente")
         actual = self.token_actual()
         if not actual:
             return nodo
+
         if actual["lexema"] == "(":
-            self.avanzar()
-            nodo.agregar_hijo(NodoAST("(", "("))
+            par_izq = self.coincidir("DELIMITADOR", "(")
+            nodo.agregar_hijo(self.crear_nodo_token(par_izq, "(", "componente"))
             expr = self.expresion()
             if expr:
                 nodo.agregar_hijo(expr)
-            if not self.coincidir("DELIMITADOR", ")"):
-                return nodo
-            nodo.agregar_hijo(NodoAST(")", ")"))
+            par_der = self.coincidir("DELIMITADOR", ")")
+            if par_der:
+                nodo.agregar_hijo(self.crear_nodo_token(par_der, ")", "componente"))
         elif actual["tipo"] in ("NUM_ENTERO", "NUM_FLOTANTE"):
+            nodo.agregar_hijo(self.crear_nodo_token(actual, actual["tipo"].lower(), "componente"))
             self.avanzar()
-            nodo.agregar_hijo(NodoAST(actual["tipo"].lower(), actual["lexema"]))
         elif actual["tipo"] == "IDENTIFICADOR":
+            nodo.agregar_hijo(self.crear_nodo_token(actual, "id", "componente"))
             self.avanzar()
-            nodo.agregar_hijo(NodoAST("id", actual["lexema"]))
         elif actual["tipo"] == "RESERVADA" and actual["lexema"] in ("true", "false"):
+            nodo.agregar_hijo(self.crear_nodo_token(actual, "bool_val", "componente"))
             self.avanzar()
-            nodo.agregar_hijo(NodoAST("bool_val", actual["lexema"]))
         elif actual["tipo"] == "OP_LOGICO" and actual["lexema"] == "!":
-            op = self.coincidir("OP_LOGICO")
-            nodo_op = NodoAST("log_op", op["lexema"])
-            comp = self.componente()
-            if comp:
-                nodo_op.agregar_hijo(comp)
-                nodo.agregar_hijo(nodo_op)
-            else:
-                self.errores.append(f"Se esperaba un componente después del operador lógico '{op['lexema']}' en línea {op['linea']}, columna {op['columna']}")
+            op = self.coincidir("OP_LOGICO", "!")
+            op_nodo = self.crear_nodo_token(op, "log_op", "op_logico")
+            c = self.componente()
+            if c:
+                op_nodo.agregar_hijo(c)
+                nodo.agregar_hijo(op_nodo)
         return nodo
 
     def lista_sentencias(self):
-        print("Iniciando lista_sentencias, token actual:", self.token_actual())
-        nodo = NodoAST("lista_sentencias")
-        actual = self.token_actual()
-        while actual and (
-            actual["tipo"] == "IDENTIFICADOR" or
-            (actual["tipo"] == "RESERVADA" and actual["lexema"] in ("if", "while", "do", "cin", "cout"))
-        ):
-            stmt = self.sentencia()
-            if stmt:
-                nodo.agregar_hijo(stmt)
+        nodo = NodoAST("lista_sentencias", gramatica="lista_sentencias")
+        while True:
             actual = self.token_actual()
-        print("Fin de lista_sentencias, token actual:", self.token_actual())
+            if not actual or actual["lexema"] in ("end", "else", "until", "}"):
+                break
+            sent = self.sentencia()
+            if sent:
+                nodo.agregar_hijo(sent)
+            else:
+                break
         return nodo
 
 def generar_tabla_errores_sintacticos(errores):
