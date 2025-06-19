@@ -190,8 +190,8 @@ class TreeIndentDelegate(QStyledItemDelegate):
             while parent.isValid():
                 depth += 1
                 parent = parent.parent()
-            option.rect = QRect(option.rect.left() + depth * 0, option.rect.top(), 
-                                option.rect.width() - depth * 0, option.rect.height())
+            option.rect = QRect(option.rect.left() + depth * 15, option.rect.top(), 
+                                option.rect.width() - depth * 15, option.rect.height())
         super().paint(painter, option, index)
 
 class IDECompilador(QMainWindow):
@@ -281,26 +281,26 @@ class IDECompilador(QMainWindow):
         self.syntax_errors_box.setPlainText(generar_tabla_errores_sintacticos(errores))
 
     def populate_tree(self, nodo, parent):
-        # Tipos de nodos a omitir
+        # Tipos de nodos a omitir (excluir nodos intermedios sin valor significativo)
         excluded_types = [
-            "programa", "repeticion", "lista_sentencias", "seleccion", "iteracion",
-            "lista_declaracion", "sent_in", "sent_out", "declaracion", "expresion",
-            "expresion_logica", "expresion_relacional",
-            "termino", "factor"
+            "programa", "lista_sentencias", "lista_declaracion", "expresion",
+            "expresion_logica", "expresion_relacional", "expresion_aritmetica",
+            "termino", "factor", "sent_in", "sent_out"
         ]
-        # Si el nodo es de un tipo excluido, procesar solo sus hijos
-        if nodo.tipo in excluded_types:
+        
+        # Si el nodo es de un tipo excluido y tiene hijos, procesar solo los hijos
+        if nodo.tipo in excluded_types and nodo.hijos:
             for hijo in nodo.hijos:
                 self.populate_tree(hijo, parent)
             return
         
-        # Crear item para nodos no excluidos
+        # Crear item para nodos visibles, incluyendo estructuras de control
         item = QTreeWidgetItem(parent)
         # Columna 0: Nodo
         if nodo.tipo == "ASIGNACION":
             item.setText(0, nodo.valor or "=")
         elif nodo.tipo in ("int", "float", "bool") or \
-             (nodo.tipo == "RESERVADA" and nodo.valor in ("int", "float", "bool")):
+             (nodo.tipo == "RESERVADA" and nodo.valor in ("int", "float", "bool", "if", "then", "else", "end", "while", "do", "until")):
             item.setText(0, nodo.valor or nodo.tipo)
         elif nodo.tipo == "expresion_aritmetica":
             item.setText(0, "")  # No mostrar el tipo, solo los hijos
@@ -310,8 +310,8 @@ class IDECompilador(QMainWindow):
         if nodo.tipo == "ASIGNACION":
             item.setText(1, nodo.valor or "=")
         elif nodo.tipo in ("int", "float", "bool") or \
-             (nodo.tipo == "RESERVADA" and nodo.valor in ("int", "float", "bool")):
-            item.setText(1, nodo.valor or nodo.tipo)
+             (nodo.tipo == "RESERVADA" and nodo.valor in ("int", "float", "bool", "if", "then", "else", "end", "while", "do", "until")):
+            item.setText(1, nodo.tipo)
         elif nodo.tipo == "expresion_aritmetica":
             item.setText(1, "expresion_aritmetica")
         else:
@@ -319,12 +319,12 @@ class IDECompilador(QMainWindow):
         # Columnas 2 y 3: Línea y Columna
         item.setText(2, str(nodo.linea or ""))
         item.setText(3, str(nodo.columna or ""))
-        # Procesar hijos
+        # Procesar hijos, incluyendo anidamiento de estructuras de control
         for hijo in nodo.hijos:
             self.populate_tree(hijo, item)
         # Expandir automáticamente para ver la estructura
-        if parent:
-            parent.setExpanded(True)
+        item.setExpanded(True)
+
 
     def initUI(self):
         self.main_splitter = QSplitter(Qt.Vertical)
