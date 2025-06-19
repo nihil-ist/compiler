@@ -82,20 +82,23 @@ class Parser:
         return nodo
 
     def lista_declaracion(self):
-        nodo = NodoAST("lista_declaracion", gramatica="lista_declaracion")
+        nodo = NodoAST("lista_declaracion")
         while True:
             actual = self.token_actual()
             if not actual or actual["lexema"] == "}":
                 break
+
             if actual["tipo"] == "RESERVADA" and actual["lexema"] in ("int", "float", "bool"):
                 hijo = self.declaracion_variable()
             else:
                 hijo = self.sentencia()
+
             if hijo:
                 nodo.agregar_hijo(hijo)
             else:
                 break
         return nodo
+
 
     def declaracion(self):
         actual = self.token_actual()
@@ -108,29 +111,27 @@ class Parser:
         return None
 
     def declaracion_variable(self):
-        nodo = NodoAST("declaracion_variable", gramatica="declaracion_variable")
         tipo = self.coincidir("RESERVADA")
         if not tipo:
-            return nodo
-        nodo.agregar_hijo(self.crear_nodo_token(tipo, "tipo", "tipo"))
+            return None
+        
+        nodo = NodoAST(tipo["lexema"], linea=tipo["linea"], columna=tipo["columna"])  # Nodo es int, float, bool
 
+        # primer id
         id_token = self.coincidir("IDENTIFICADOR")
-        if not id_token:
-            return nodo
-        nodo.agregar_hijo(self.crear_nodo_token(id_token, "identificador", "identificador"))
+        if id_token:
+            nodo.agregar_hijo(self.crear_nodo_token(id_token, "ID"))
 
+        # más ids
         while self.token_actual() and self.token_actual()["lexema"] == ",":
-            coma_token = self.coincidir("DELIMITADOR", ",")
-            nodo_coma = self.crear_nodo_token(coma_token, "coma", "identificador")
+            self.coincidir("DELIMITADOR", ",")
             siguiente_id = self.coincidir("IDENTIFICADOR")
             if siguiente_id:
-                nodo_coma.agregar_hijo(self.crear_nodo_token(siguiente_id, "identificador", "identificador"))
-                nodo.agregar_hijo(nodo_coma)
+                nodo.agregar_hijo(self.crear_nodo_token(siguiente_id, "ID"))
 
-        fin = self.coincidir("DELIMITADOR", ";")
-        if fin:
-            nodo.agregar_hijo(self.crear_nodo_token(fin, ";", "declaracion_variable"))
+        self.coincidir("DELIMITADOR", ";")  # no agregar ; como hijo
         return nodo
+
 
     def sentencia(self):
         actual = self.token_actual()
@@ -279,26 +280,23 @@ class Parser:
         return nodo
 
     def asignacion(self):
-        nodo = NodoAST("asignacion", gramatica="asignacion")
         id_token = self.coincidir("IDENTIFICADOR")
-        if not id_token:
-            return nodo
-        nodo.agregar_hijo(self.crear_nodo_token(id_token, "id", "asignacion"))
-
         op_token = self.coincidir("ASIGNACION")
-        if not op_token:
-            return nodo
-        nodo.agregar_hijo(self.crear_nodo_token(op_token, op_token["lexema"], "asignacion"))
 
-        if op_token["lexema"] == "=":
-            expr = self.expresion()
-            if expr:
-                nodo.agregar_hijo(expr)
+        if not id_token or not op_token:
+            return None
 
-        fin = self.coincidir("DELIMITADOR", ";")
-        if fin:
-            nodo.agregar_hijo(self.crear_nodo_token(fin, ";", "asignacion"))
+        nodo = NodoAST(op_token["lexema"], linea=op_token["linea"], columna=op_token["columna"])  # "="
+
+        nodo.agregar_hijo(self.crear_nodo_token(id_token, "ID"))
+
+        expr = self.expresion()
+        if expr:
+            nodo.agregar_hijo(expr)
+
+        self.coincidir("DELIMITADOR", ";")
         return nodo
+
 
     def sent_expresion(self):
         nodo = NodoAST("sent_expresion")
@@ -315,77 +313,84 @@ class Parser:
         return nodo
 
     def expresion(self):
-        nodo = NodoAST("expresion", gramatica="expresion")
         izq = self.expresion_relacional()
-        if izq:
-            nodo.agregar_hijo(izq)
-
-        while True:
-            actual = self.token_actual()
-            if actual and actual["tipo"] == "OP_LOGICO":
+        if not izq:
+            return None
+        
+        actual = self.token_actual()
+        if actual and actual["tipo"] == "OP_LOGICO":
+            nodo = NodoAST("op_logico", linea=actual["linea"], columna=actual["columna"])
+            while actual and actual["tipo"] == "OP_LOGICO":
                 op_token = self.coincidir("OP_LOGICO")
-                op_nodo = self.crear_nodo_token(op_token, "op_logico", "op_logico")
                 der = self.expresion_relacional()
                 if der:
+                    op_nodo = NodoAST(op_token["lexema"], linea=op_token["linea"], columna=op_token["columna"])
+                    op_nodo.agregar_hijo(izq)
                     op_nodo.agregar_hijo(der)
-                    nodo.agregar_hijo(op_nodo)
-            else:
-                break
-        return nodo
+                    izq = op_nodo  # ahora el árbol crece hacia arriba
+                
+                actual = self.token_actual()
+            
+            return izq  # retorno del árbol construido
+        
+        else:
+            return izq  # si no hay operador lógico, retorno la subexpresión
+
     
     def expresion_relacional(self):
-        nodo = NodoAST("expresion_relacional", gramatica="expresion")
         izq = self.expresion_simple()
-        if izq:
-            nodo.agregar_hijo(izq)
-
+        if not izq:
+            return None
+        
         actual = self.token_actual()
         if actual and actual["tipo"] == "OP_RELACIONAL":
             op_token = self.coincidir("OP_RELACIONAL")
-            op_nodo = self.crear_nodo_token(op_token, "rel_op", "rel_op")
             der = self.expresion_simple()
             if der:
+                op_nodo = NodoAST(op_token["lexema"], linea=op_token["linea"], columna=op_token["columna"])
+                op_nodo.agregar_hijo(izq)
                 op_nodo.agregar_hijo(der)
-                nodo.agregar_hijo(op_nodo)
-        return nodo
+                return op_nodo
+        return izq
+
 
     def expresion_simple(self):
-        nodo = NodoAST("expresion_simple", gramatica="expresion_simple")
-        term = self.termino()
-        if term:
-            nodo.agregar_hijo(term)
-
-        while True:
+        izq = self.termino()
+        if not izq:
+            return None
+        
+        actual = self.token_actual()
+        while actual and actual["lexema"] in ("+", "-", "++", "--"):
+            op = self.coincidir(actual["tipo"])
+            der = self.termino()
+            if der:
+                op_nodo = NodoAST(op["lexema"], linea=op["linea"], columna=op["columna"])
+                op_nodo.agregar_hijo(izq)
+                op_nodo.agregar_hijo(der)
+                izq = op_nodo
+            
             actual = self.token_actual()
-            if actual and actual["lexema"] in ("+", "-", "++", "--"):
-                op = self.coincidir(actual["tipo"])
-                op_nodo = self.crear_nodo_token(op, "suma_op", "suma_op")
-                t = self.termino()
-                if t:
-                    op_nodo.agregar_hijo(t)
-                    nodo.agregar_hijo(op_nodo)
-            else:
-                break
-        return nodo
+        return izq
+
 
     def termino(self):
-        nodo = NodoAST("termino", gramatica="termino")
-        fact = self.factor()
-        if fact:
-            nodo.agregar_hijo(fact)
-
-        while True:
+        izq = self.factor()
+        if not izq:
+            return None
+        
+        actual = self.token_actual()
+        while actual and actual["lexema"] in ("*", "/", "%"):
+            op = self.coincidir("OP_ARITMETICO")
+            der = self.factor()
+            if der:
+                op_nodo = NodoAST(op["lexema"], linea=op["linea"], columna=op["columna"])
+                op_nodo.agregar_hijo(izq)
+                op_nodo.agregar_hijo(der)
+                izq = op_nodo
+            
             actual = self.token_actual()
-            if actual and actual["lexema"] in ("*", "/", "%"):
-                op = self.coincidir("OP_ARITMETICO")
-                op_nodo = self.crear_nodo_token(op, "mult_op", "mult_op")
-                f = self.factor()
-                if f:
-                    op_nodo.agregar_hijo(f)
-                    nodo.agregar_hijo(op_nodo)
-            else:
-                break
-        return nodo
+        return izq
+
 
     def factor(self):
         nodo = NodoAST("factor", gramatica="factor")

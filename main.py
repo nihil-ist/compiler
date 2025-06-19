@@ -276,9 +276,12 @@ class IDECompilador(QMainWindow):
     def populate_tree(self, nodo, parent):
         item = QTreeWidgetItem(parent)
         item.setText(0, nodo.tipo)
-        item.setText(1, nodo.valor if nodo.valor else "")
+        item.setText(1, nodo.valor or "")
+        item.setText(2, str(nodo.linea or ""))
+        item.setText(3, str(nodo.columna or ""))
         for hijo in nodo.hijos:
             self.populate_tree(hijo, item)
+
 
     def initUI(self):
         main_splitter = QSplitter(Qt.Vertical)
@@ -322,7 +325,7 @@ class IDECompilador(QMainWindow):
         ast_toolbar.addAction(collapse_action)
 
         self.ast_tree = QTreeWidget()
-        self.ast_tree.setHeaderLabels(["Nodo", "Valor"])
+        self.ast_tree.setHeaderLabels(["Nodo", "Valor", "Ln", "Col"])  # 4 columnas!
         self.ast_tree.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         ast_layout.addWidget(ast_toolbar)
         ast_layout.addWidget(self.ast_tree)
