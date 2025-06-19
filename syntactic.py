@@ -316,6 +316,25 @@ class Parser:
 
     def expresion(self):
         nodo = NodoAST("expresion", gramatica="expresion")
+        izq = self.expresion_relacional()
+        if izq:
+            nodo.agregar_hijo(izq)
+
+        while True:
+            actual = self.token_actual()
+            if actual and actual["tipo"] == "OP_LOGICO":
+                op_token = self.coincidir("OP_LOGICO")
+                op_nodo = self.crear_nodo_token(op_token, "op_logico", "op_logico")
+                der = self.expresion_relacional()
+                if der:
+                    op_nodo.agregar_hijo(der)
+                    nodo.agregar_hijo(op_nodo)
+            else:
+                break
+        return nodo
+    
+    def expresion_relacional(self):
+        nodo = NodoAST("expresion_relacional", gramatica="expresion")
         izq = self.expresion_simple()
         if izq:
             nodo.agregar_hijo(izq)
@@ -323,11 +342,11 @@ class Parser:
         actual = self.token_actual()
         if actual and actual["tipo"] == "OP_RELACIONAL":
             op_token = self.coincidir("OP_RELACIONAL")
-            nodo_op = self.crear_nodo_token(op_token, "rel_op", "rel_op")
+            op_nodo = self.crear_nodo_token(op_token, "rel_op", "rel_op")
             der = self.expresion_simple()
             if der:
-                nodo_op.agregar_hijo(der)
-                nodo.agregar_hijo(nodo_op)
+                op_nodo.agregar_hijo(der)
+                nodo.agregar_hijo(op_nodo)
         return nodo
 
     def expresion_simple(self):
