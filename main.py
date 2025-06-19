@@ -190,8 +190,8 @@ class TreeIndentDelegate(QStyledItemDelegate):
             while parent.isValid():
                 depth += 1
                 parent = parent.parent()
-            option.rect = QRect(option.rect.left() + depth * 15, option.rect.top(), 
-                                option.rect.width() - depth * 15, option.rect.height())
+            option.rect = QRect(option.rect.left() + depth * 0, option.rect.top(), 
+                                option.rect.width() - depth * 0, option.rect.height())
         super().paint(painter, option, index)
 
 class IDECompilador(QMainWindow):
