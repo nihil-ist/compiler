@@ -1,0 +1,6 @@
+main {
+    int x, y;
+    if x > y then
+        x = x + 1;
+    end
+}

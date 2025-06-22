@@ -1,0 +1,8 @@
+main {
+    float num;
+    num = 3.14;
+    while num > 0
+        cout << num;
+        num = num - 1;
+    end
+}
