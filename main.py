@@ -1,6 +1,8 @@
 import sys
+from typing import List
 from lexical import analizar_codigo_fuente, generar_tabla_tokens, generar_tabla_errores
 from syntactic import analizar_sintacticamente, generar_tabla_errores_sintacticos
+from semantic import analizar_semantica, formatear_errores_semanticos
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QAction, QFileDialog, QStatusBar, QTabWidget, QWidget,
     QVBoxLayout, QHBoxLayout, QPlainTextEdit, QMessageBox, QSplitter, QToolBar, QTreeWidget, QTreeWidgetItem
@@ -280,6 +282,48 @@ class IDECompilador(QMainWindow):
         self.populate_tree(ast, self.ast_tree.invisibleRootItem())
         self.syntax_errors_box.setPlainText(generar_tabla_errores_sintacticos(errores))
 
+    def run_semantic_analysis(self):
+        current_widget = self.editor_tabs.currentWidget()
+        if not current_widget:
+            return
+        text_edit = current_widget.findChild(CodeEditor)
+        if not text_edit:
+            return
+
+        source_code = text_edit.toPlainText()
+        tokens, lexical_errors = analizar_codigo_fuente(source_code)
+
+        if lexical_errors:
+            self.semantic_analysis_box.setPlainText("Corrija los errores léxicos antes del análisis semántico.")
+            self.symbol_table_box.setPlainText("Tabla de símbolos vacía.")
+            mensaje = ["No se puede ejecutar el análisis semántico porque hay errores léxicos pendientes."]
+            self.semantic_errors_box.setPlainText(formatear_errores_semanticos(mensaje))
+            return
+
+        filtered_tokens = [t for t in tokens if t["tipo"] not in ("COMENTARIO", "ERROR")]
+        ast, syntactic_errors = analizar_sintacticamente(filtered_tokens)
+
+        if not ast:
+            self.semantic_analysis_box.setPlainText("AST no disponible.")
+            self.symbol_table_box.setPlainText("Tabla de símbolos vacía.")
+            mensaje = ["El análisis sintáctico no generó un AST válido."]
+            self.semantic_errors_box.setPlainText(formatear_errores_semanticos(mensaje))
+            return
+
+        semantic_result = analizar_semantica(ast)
+        self.semantic_analysis_box.setPlainText(semantic_result.annotated_tree)
+        self.symbol_table_box.setPlainText(semantic_result.symbol_table_text)
+
+        combined_errors: List[str] = []
+        if syntactic_errors:
+            combined_errors.append("El análisis sintáctico reportó errores; los resultados semánticos pueden ser incompletos.")
+            combined_errors.extend(syntactic_errors)
+        combined_errors.extend(semantic_result.errors)
+
+        self.semantic_errors_box.setPlainText(formatear_errores_semanticos(combined_errors))
+
+        self.analysis_tabs.setCurrentWidget(self.semantic_analysis_box)
+
     def populate_tree(self, nodo, parent):
         # Tipos de nodos a omitir (excluir nodos intermedios sin valor significativo)
         excluded_types = [
@@ -376,9 +420,18 @@ class IDECompilador(QMainWindow):
         self.syntax_analysis_box.setReadOnly(True)
         self.syntax_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.analysis_tabs.addTab(self.syntax_analysis_box, "Análisis Sintáctico")
-        self.analysis_tabs.addTab(QWidget(), "Análisis Semántico")
-        self.analysis_tabs.addTab(QWidget(), "Código Intermedio")
-        self.analysis_tabs.addTab(QWidget(), "Tabla Hash")
+        self.semantic_analysis_box = QPlainTextEdit()
+        self.semantic_analysis_box.setReadOnly(True)
+        self.semantic_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.analysis_tabs.addTab(self.semantic_analysis_box, "Análisis Semántico")
+        self.symbol_table_box = QPlainTextEdit()
+        self.symbol_table_box.setReadOnly(True)
+        self.symbol_table_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.analysis_tabs.addTab(self.symbol_table_box, "Tabla de Símbolos")
+        self.intermediate_code_box = QPlainTextEdit()
+        self.intermediate_code_box.setReadOnly(True)
+        self.intermediate_code_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.analysis_tabs.addTab(self.intermediate_code_box, "Código Intermedio")
 
         for i in range(self.analysis_tabs.count()):
             widget = self.analysis_tabs.widget(i)
@@ -402,7 +455,10 @@ class IDECompilador(QMainWindow):
         self.syntax_errors_box.setReadOnly(True)
         self.syntax_errors_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         error_tabs.addTab(self.syntax_errors_box, "Errores Sintácticos")
-        error_tabs.addTab(QWidget(), "Errores Semánticos")
+        self.semantic_errors_box = QPlainTextEdit()
+        self.semantic_errors_box.setReadOnly(True)
+        self.semantic_errors_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        error_tabs.addTab(self.semantic_errors_box, "Errores Semánticos")
         error_tabs.addTab(QWidget(), "Resultados")
 
         self.main_splitter.addWidget(editor_splitter)
@@ -423,6 +479,9 @@ class IDECompilador(QMainWindow):
         compile_sintactic = QAction(QIcon("assets/play.svg"), "Compilar sintáctica", self)
         compile_sintactic.triggered.connect(self.run_syntactic_analysis)
         compile_menu.addAction(compile_sintactic)
+        compile_semantic = QAction(QIcon("assets/play.svg"), "Compilar semántica", self)
+        compile_semantic.triggered.connect(self.run_semantic_analysis)
+        compile_menu.addAction(compile_semantic)
 
         new_action = QAction(QIcon("assets/file-circle-plus.svg"), "Nuevo", self)
         new_action.triggered.connect(self.create_new_file)
