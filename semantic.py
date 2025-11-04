@@ -333,13 +333,16 @@ class SemanticAnalyzer:
             node.tipo_semantico = entry.type
             node.valor_semantico = entry.value
             return entry.type, entry.value
-        if node.tipo == "arit_op":
+        # Normalize checks using the lower-cased node.tipo so we accept
+        # variants produced by the parser (e.g. 'OP_ARITMETICO') as well
+        # as normalized names like 'arit_op', 'rel_op', 'op_logico', 'log_op'.
+        if "arit" in tipo:
             return self._evaluate_arithmetic(node)
-        if node.tipo == "rel_op":
+        if "rel" in tipo:
             return self._evaluate_relational(node)
-        if node.tipo == "op_logico":
+        if tipo == "op_logico" or tipo == "op_logico" or "op_logico" in tipo:
             return self._evaluate_logical(node)
-        if node.tipo == "log_op":
+        if tipo == "log_op" or "log_op" in tipo:
             return self._evaluate_unary_logical(node)
         # Fallback: evaluate children to propagate annotations
         last_type: Optional[str] = None
