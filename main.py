@@ -294,7 +294,12 @@ class IDECompilador(QMainWindow):
         tokens, lexical_errors = analizar_codigo_fuente(source_code)
 
         if lexical_errors:
-            self.semantic_analysis_box.setPlainText("Corrija los errores léxicos antes del análisis semántico.")
+            # Mostrar mensaje en el árbol semántico
+            if hasattr(self, 'semantic_tree'):
+                self.semantic_tree.clear()
+                item = QTreeWidgetItem(self.semantic_tree.invisibleRootItem())
+                item.setText(0, "Corrija los errores léxicos antes del análisis semántico.")
+                item.setExpanded(True)
             self.symbol_table_box.setPlainText("Tabla de símbolos vacía.")
             mensaje = ["No se puede ejecutar el análisis semántico porque hay errores léxicos pendientes."]
             self.semantic_errors_box.setPlainText(formatear_errores_semanticos(mensaje))
@@ -304,14 +309,24 @@ class IDECompilador(QMainWindow):
         ast, syntactic_errors = analizar_sintacticamente(filtered_tokens)
 
         if not ast:
-            self.semantic_analysis_box.setPlainText("AST no disponible.")
+            if hasattr(self, 'semantic_tree'):
+                self.semantic_tree.clear()
+                item = QTreeWidgetItem(self.semantic_tree.invisibleRootItem())
+                item.setText(0, "AST no disponible para análisis semántico.")
+                item.setExpanded(True)
             self.symbol_table_box.setPlainText("Tabla de símbolos vacía.")
             mensaje = ["El análisis sintáctico no generó un AST válido."]
             self.semantic_errors_box.setPlainText(formatear_errores_semanticos(mensaje))
             return
 
+        # Ejecutar análisis semántico
         semantic_result = analizar_semantica(ast)
-        self.semantic_analysis_box.setPlainText(semantic_result.annotated_tree)
+        # Mostrar también el análisis semántico en texto (anotado) -- opcional
+        # Rellenar el árbol de la pestaña 'Análisis Semántico' con las anotaciones
+        if hasattr(self, 'semantic_tree'):
+            self.semantic_tree.clear()
+            self.populate_semantic_tree(ast, self.semantic_tree.invisibleRootItem())
+        # Mostrar tabla de símbolos simplificada
         self.symbol_table_box.setPlainText(semantic_result.symbol_table_text)
 
         combined_errors: List[str] = []
@@ -322,7 +337,26 @@ class IDECompilador(QMainWindow):
 
         self.semantic_errors_box.setPlainText(formatear_errores_semanticos(combined_errors))
 
-        self.analysis_tabs.setCurrentWidget(self.semantic_analysis_box)
+        # Seleccionar la pestaña del análisis semántico
+        try:
+            if hasattr(self, 'semantic_tree') and self.semantic_tree.parent():
+                idx = self.analysis_tabs.indexOf(self.semantic_tree.parent())
+                if idx != -1:
+                    self.analysis_tabs.setCurrentIndex(idx)
+                else:
+                    # fallback: choose by label if available
+                    for i in range(self.analysis_tabs.count()):
+                        if self.analysis_tabs.tabText(i) == "Análisis Semántico":
+                            self.analysis_tabs.setCurrentIndex(i)
+                            break
+            else:
+                # fallback to sensible index
+                for i in range(self.analysis_tabs.count()):
+                    if self.analysis_tabs.tabText(i) == "Análisis Semántico":
+                        self.analysis_tabs.setCurrentIndex(i)
+                        break
+        except Exception:
+            pass
 
     def populate_tree(self, nodo, parent):
         # Tipos de nodos a omitir (excluir nodos intermedios sin valor significativo)
@@ -367,6 +401,44 @@ class IDECompilador(QMainWindow):
         for hijo in nodo.hijos:
             self.populate_tree(hijo, item)
         # Expandir automáticamente para ver la estructura
+        item.setExpanded(True)
+
+
+    def populate_semantic_tree(self, nodo, parent):
+        """Similar a populate_tree pero mostrando las anotaciones semánticas (tipo y valor)."""
+        excluded_types = [
+            "programa", "lista_sentencias", "lista_declaracion", "expresion",
+            "expresion_logica", "expresion_relacional", "expresion_aritmetica",
+            "termino", "factor", "sent_in", "sent_out"
+        ]
+        if nodo.tipo in excluded_types and nodo.hijos:
+            for hijo in nodo.hijos:
+                self.populate_semantic_tree(hijo, parent)
+            return
+
+        item = QTreeWidgetItem(parent)
+        # Construir etiqueta tal como en el formato de texto anotado
+        tipo_attr = getattr(nodo, 'tipo_semantico', None)
+        val_attr = getattr(nodo, 'valor_semantico', None)
+        # base label: tipo y (valor token) si existe
+        label = f"{nodo.tipo}"
+        if getattr(nodo, 'valor', None):
+            label += f" ({nodo.valor})"
+        # si hay anotaciones semánticas, añadir [tipo=..., valor=...]
+        if tipo_attr is not None or val_attr is not None:
+            type_text = tipo_attr if tipo_attr is not None else "-"
+            value_text = "-" if val_attr is None else str(val_attr)
+            label += f" [tipo={type_text}, valor={value_text}]"
+
+        item.setText(0, label)
+        # dejar columna 1 para compatibilidad (vacía o tipo simple)
+        item.setText(1, tipo_attr if tipo_attr is not None else "")
+        # Columnas 2 y 3: línea y columna
+        item.setText(2, str(getattr(nodo, 'linea', '') or ""))
+        item.setText(3, str(getattr(nodo, 'columna', '') or ""))
+
+        for hijo in nodo.hijos:
+            self.populate_semantic_tree(hijo, item)
         item.setExpanded(True)
 
 
@@ -416,14 +488,33 @@ class IDECompilador(QMainWindow):
         ast_widget.setLayout(ast_layout)
         self.analysis_tabs.addTab(ast_widget, "Árbol Sintáctico")
 
+        
         self.syntax_analysis_box = QPlainTextEdit()
         self.syntax_analysis_box.setReadOnly(True)
         self.syntax_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.analysis_tabs.addTab(self.syntax_analysis_box, "Análisis Sintáctico")
-        self.semantic_analysis_box = QPlainTextEdit()
-        self.semantic_analysis_box.setReadOnly(True)
-        self.semantic_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
-        self.analysis_tabs.addTab(self.semantic_analysis_box, "Análisis Semántico")
+
+        # Pestaña: ÁRBOL del Análisis Semántico (visual)
+        semantic_widget = QWidget()
+        semantic_layout = QVBoxLayout()
+        semantic_toolbar = QToolBar()
+        semantic_toolbar.setStyleSheet("background-color: #2d2a2e; padding: 5px;")
+        expand_sem_action = QAction(QIcon("assets/expand.svg"), "Expandir Todo", self)
+        expand_sem_action.triggered.connect(lambda: self.semantic_tree.expandAll())
+        semantic_toolbar.addAction(expand_sem_action)
+        collapse_sem_action = QAction(QIcon("assets/collapse.svg"), "Colapsar Todo", self)
+        collapse_sem_action.triggered.connect(lambda: self.semantic_tree.collapseAll())
+        semantic_toolbar.addAction(collapse_sem_action)
+
+        self.semantic_tree = QTreeWidget()
+        self.semantic_tree.setHeaderLabels(["Nodo", "Tipo/Valor", "Ln", "Col"])
+        self.semantic_tree.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.semantic_tree.setItemDelegateForColumn(0, TreeIndentDelegate())
+        semantic_layout.addWidget(semantic_toolbar)
+        semantic_layout.addWidget(self.semantic_tree)
+        semantic_widget.setLayout(semantic_layout)
+        self.analysis_tabs.addTab(semantic_widget, "Análisis Semántico")
+
         self.symbol_table_box = QPlainTextEdit()
         self.symbol_table_box.setReadOnly(True)
         self.symbol_table_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")

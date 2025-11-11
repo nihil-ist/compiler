@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 TYPE_SIZES = {
@@ -19,6 +19,8 @@ class SymbolTableEntry:
     line: Optional[int]
     column: Optional[int]
     value: Any = None
+    # Lista de todas las lineas donde aparece el identificador (declaracion + usos)
+    lines: List[int] = field(default_factory=list)
 
 
 class SymbolTable:
@@ -58,6 +60,9 @@ class SymbolTable:
             line=line,
             column=column,
         )
+        # registrar la linea de declaracion si esta disponible
+        if line is not None:
+            entry.lines.append(line)
         current_scope[name] = entry
         self.entries.append(entry)
         self.offset_stack[-1] += TYPE_SIZES.get(sym_type, 4)
@@ -70,34 +75,29 @@ class SymbolTable:
                 return entry
         return None
 
+    def record_occurrence(self, name: str, line: Optional[int]) -> None:
+        """Registra una aparicion (uso) del identificador en la linea dada."""
+        if line is None:
+            return
+        for scope in reversed(self.scopes):
+            entry = scope.get(name)
+            if entry:
+                if line not in entry.lines:
+                    entry.lines.append(line)
+                return
+
     def format(self) -> str:
+        # Mostrar solo: nombre, tipo, ambito, valor, lineas (todas las apariciones)
         if not self.entries:
             return "Tabla de simbolos vacia."
-        header = "{:<15}{:<10}{:<18}{:<8}{:<8}{:<8}{:<10}{:<12}\n".format(
-            "Nombre",
-            "Tipo",
-            "Ambito",
-            "Nivel",
-            "Offset",
-            "Linea",
-            "Columna",
-            "Valor",
+        header = "{:<20}{:<10}{:<18}{:<15}{}\n".format(
+            "Nombre", "Tipo", "Ambito", "Valor", "Lineas"
         )
-        lines = [header, "-" * 97 + "\n"]
+        lines = [header, "-" * 80 + "\n"]
         for entry in self.entries:
             value_text = "-" if entry.value is None else str(entry.value)
-            lines.append(
-                "{:<15}{:<10}{:<18}{:<8}{:<8}{:<8}{:<10}{:<12}\n".format(
-                    entry.name,
-                    entry.type,
-                    entry.scope,
-                    entry.level,
-                    entry.offset,
-                    entry.line if entry.line is not None else "-",
-                    entry.column if entry.column is not None else "-",
-                    value_text,
-                )
-            )
+            lines_list = ",".join(str(l) for l in sorted(set(entry.lines))) if entry.lines else "-"
+            lines.append("{:<20}{:<10}{:<18}{:<15}{}\n".format(entry.name, entry.type, entry.scope, value_text, lines_list))
         return "".join(lines)
 
 
@@ -186,6 +186,8 @@ class SemanticAnalyzer:
             else:
                 target_node.tipo_semantico = entry.type
                 target_node.valor_semantico = entry.value
+                # registrar uso en la tabla de simbolos
+                self.symbol_table.record_occurrence(entry.name, getattr(target_node, 'linea', None))
         expr_type, expr_value = self.evaluate_expression(expr_node)
         if entry and expr_type:
             if self.is_assignment_compatible(entry.type, expr_type):
@@ -253,6 +255,7 @@ class SemanticAnalyzer:
                 else:
                     child.tipo_semantico = entry.type
                     child.valor_semantico = entry.value
+                    self.symbol_table.record_occurrence(entry.name, getattr(child, 'linea', None))
         node.tipo_semantico = "void"
 
     def visit_sent_out(self, node) -> None:
@@ -330,6 +333,8 @@ class SemanticAnalyzer:
                 node.tipo_semantico = None
                 node.valor_semantico = None
                 return None, None
+            # registrar uso en la tabla (aparece en esta linea)
+            self.symbol_table.record_occurrence(entry.name, getattr(node, 'linea', None))
             node.tipo_semantico = entry.type
             node.valor_semantico = entry.value
             return entry.type, entry.value
@@ -371,8 +376,26 @@ class SemanticAnalyzer:
             node.tipo_semantico = None
             node.valor_semantico = None
             return None, None
-        result_type = "float" if "float" in {left_type, right_type} or node.valor == "/" else "int"
-        value = self.compute_arithmetic(node.valor, left_value, right_value)
+        # Determine result type: if any operand is float -> float.
+        # For division: if both operands are int, produce an int (truncating division).
+        if node.valor == "/":
+            if left_type == "int" and right_type == "int":
+                result_type = "int"
+            else:
+                result_type = "float"
+        else:
+            result_type = "float" if "float" in {left_type, right_type} else "int"
+
+        # Compute value respecting integer-division semantics when appropriate
+        if node.valor == "/" and result_type == "int":
+            try:
+                # Truncate toward zero to match common integer-division semantics
+                value = None if left_value is None or right_value is None else int(left_value / right_value)
+            except ZeroDivisionError:
+                self.errors.append("Division entre cero detectada.")
+                value = None
+        else:
+            value = self.compute_arithmetic(node.valor, left_value, right_value)
         node.tipo_semantico = result_type
         node.valor_semantico = value
         return result_type, value
