@@ -431,11 +431,8 @@ class IDECompilador(QMainWindow):
             label += f" [tipo={type_text}, valor={value_text}]"
 
         item.setText(0, label)
-        # dejar columna 1 para compatibilidad (vacía o tipo simple)
-        item.setText(1, tipo_attr if tipo_attr is not None else "")
-        # Columnas 2 y 3: línea y columna
-        item.setText(2, str(getattr(nodo, 'linea', '') or ""))
-        item.setText(3, str(getattr(nodo, 'columna', '') or ""))
+        # Columna 1: número de línea (si existe)
+        item.setText(1, str(getattr(nodo, 'linea', '') or ""))
 
         for hijo in nodo.hijos:
             self.populate_semantic_tree(hijo, item)
@@ -507,7 +504,8 @@ class IDECompilador(QMainWindow):
         semantic_toolbar.addAction(collapse_sem_action)
 
         self.semantic_tree = QTreeWidget()
-        self.semantic_tree.setHeaderLabels(["Nodo", "Tipo/Valor", "Ln", "Col"])
+        # Mostrar solo la anotación semántica y la línea
+        self.semantic_tree.setHeaderLabels(["Anotación", "Ln"])
         self.semantic_tree.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.semantic_tree.setItemDelegateForColumn(0, TreeIndentDelegate())
         semantic_layout.addWidget(semantic_toolbar)

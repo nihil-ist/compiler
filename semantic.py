@@ -79,11 +79,13 @@ class SymbolTable:
         """Registra una aparicion (uso) del identificador en la linea dada."""
         if line is None:
             return
+        # Registrar la aparicion independientemente de si ya existe la misma
+        # linea en la lista. Esto permite contabilizar usos repetidos en la
+        # misma linea (por ejemplo, "a = a + 1" o "a++" => dos apariciones).
         for scope in reversed(self.scopes):
             entry = scope.get(name)
             if entry:
-                if line not in entry.lines:
-                    entry.lines.append(line)
+                entry.lines.append(line)
                 return
 
     def format(self) -> str:
@@ -96,7 +98,8 @@ class SymbolTable:
         lines = [header, "-" * 80 + "\n"]
         for entry in self.entries:
             value_text = "-" if entry.value is None else str(entry.value)
-            lines_list = ",".join(str(l) for l in sorted(set(entry.lines))) if entry.lines else "-"
+            # Mostrar absolutamente todas las apariciones (incluso duplicados)
+            lines_list = ",".join(str(l) for l in entry.lines) if entry.lines else "-"
             lines.append("{:<20}{:<10}{:<18}{:<15}{}\n".format(entry.name, entry.type, entry.scope, value_text, lines_list))
         return "".join(lines)
 
