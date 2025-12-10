@@ -1,0 +1,29 @@
+main {
+    float monto, descuento, total, porc;
+    descuento = 0;
+    porc = 0;
+    cin >> monto;
+    if monto < 500 then
+        descuento = 0;
+    else
+        if monto <= 1000 then
+            porc = 0.05;
+            descuento = monto * porc;
+        else
+            if monto <= 7000 then
+                porc = 0.11;
+                descuento = monto * porc;
+            else
+                if monto <= 15000 then
+                    porc = 0.18;
+                    descuento = monto * porc;
+                else
+                    porc = 0.25;
+                    descuento = monto * porc;
+                end
+            end
+        end
+    end
+    total = monto - descuento;
+    cout << "descuento:" << descuento << " total:" << total;
+}

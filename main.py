@@ -3,13 +3,19 @@ from typing import List
 from lexical import analizar_codigo_fuente, generar_tabla_tokens, generar_tabla_errores
 from syntactic import analizar_sintacticamente, generar_tabla_errores_sintacticos
 from semantic import analizar_semantica, formatear_errores_semanticos
+from intermediate import (
+    generar_codigo_intermedio,
+    formatear_codigo_intermedio,
+    ejecutar_codigo_intermedio,
+)
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QAction, QFileDialog, QStatusBar, QTabWidget, QWidget,
-    QVBoxLayout, QHBoxLayout, QPlainTextEdit, QMessageBox, QSplitter, QToolBar, QTreeWidget, QTreeWidgetItem
+    QVBoxLayout, QHBoxLayout, QPlainTextEdit, QMessageBox, QSplitter, QToolBar, QTreeWidget, QTreeWidgetItem,
+    QInputDialog, QLineEdit, QPushButton
 )
-from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTextCursor
 from PyQt5.QtSvg import QSvgRenderer
-from PyQt5.QtCore import Qt, QRegExp
+from PyQt5.QtCore import Qt, QRegExp, QEventLoop
 from PyQt5.QtGui import QPainter, QColor, QSyntaxHighlighter, QTextCharFormat
 from PyQt5.QtWidgets import QStyledItemDelegate
 from PyQt5.QtCore import QRect
@@ -303,6 +309,9 @@ class IDECompilador(QMainWindow):
             self.symbol_table_box.setPlainText("Tabla de símbolos vacía.")
             mensaje = ["No se puede ejecutar el análisis semántico porque hay errores léxicos pendientes."]
             self.semantic_errors_box.setPlainText(formatear_errores_semanticos(mensaje))
+            self.intermediate_code_box.setPlainText("No se generó código intermedio por errores léxicos.")
+            if hasattr(self, 'execution_output_box'):
+                self.execution_output_box.setPlainText("Sin ejecución por errores léxicos.")
             return
 
         filtered_tokens = [t for t in tokens if t["tipo"] not in ("COMENTARIO", "ERROR")]
@@ -317,6 +326,9 @@ class IDECompilador(QMainWindow):
             self.symbol_table_box.setPlainText("Tabla de símbolos vacía.")
             mensaje = ["El análisis sintáctico no generó un AST válido."]
             self.semantic_errors_box.setPlainText(formatear_errores_semanticos(mensaje))
+            self.intermediate_code_box.setPlainText("No se generó código intermedio por errores sintácticos.")
+            if hasattr(self, 'execution_output_box'):
+                self.execution_output_box.setPlainText("Sin ejecución por errores sintácticos.")
             return
 
         # Ejecutar análisis semántico
@@ -336,6 +348,28 @@ class IDECompilador(QMainWindow):
         combined_errors.extend(semantic_result.errors)
 
         self.semantic_errors_box.setPlainText(formatear_errores_semanticos(combined_errors))
+
+        # Generación y ejecución de código intermedio (3AC)
+        if syntactic_errors:
+            self.intermediate_code_box.setPlainText("No se generó código intermedio por errores sintácticos.")
+            if hasattr(self, 'execution_output_box'):
+                self.execution_output_box.setPlainText("Sin ejecución por errores sintácticos.")
+        else:
+            tac = generar_codigo_intermedio(ast)
+            self.intermediate_code_box.setPlainText(formatear_codigo_intermedio(tac))
+            if hasattr(self, 'console_output_box'):
+                self.console_output_box.clear()
+            exec_result = ejecutar_codigo_intermedio(
+                tac,
+                inputs=[],
+                input_callback=self.request_console_input,
+                output_callback=self.append_console_output,
+            )
+            output_lines = exec_result.output or "(sin salida)"
+            if exec_result.errors:
+                output_lines += "\nErrores de ejecución:\n" + "\n".join(exec_result.errors)
+            if hasattr(self, 'execution_output_box'):
+                self.execution_output_box.setPlainText(output_lines)
 
         # Seleccionar la pestaña del análisis semántico
         try:
@@ -548,7 +582,28 @@ class IDECompilador(QMainWindow):
         self.semantic_errors_box.setReadOnly(True)
         self.semantic_errors_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         error_tabs.addTab(self.semantic_errors_box, "Errores Semánticos")
-        error_tabs.addTab(QWidget(), "Resultados")
+        self.execution_output_box = QPlainTextEdit()
+        self.execution_output_box.setReadOnly(True)
+        self.execution_output_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        error_tabs.addTab(self.execution_output_box, "Resultados 3AC")
+
+        # Consola interactiva para cin/cout
+        console_widget = QWidget()
+        console_layout = QVBoxLayout()
+        self.console_output_box = QPlainTextEdit()
+        self.console_output_box.setReadOnly(True)
+        self.console_output_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        console_layout.addWidget(self.console_output_box)
+        input_layout = QHBoxLayout()
+        self.console_input_line = QLineEdit()
+        self.console_input_line.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
+        self.console_send_button = QPushButton("Enviar")
+        self.console_send_button.setStyleSheet("background-color: #727072; color: #ffffff;")
+        input_layout.addWidget(self.console_input_line)
+        input_layout.addWidget(self.console_send_button)
+        console_layout.addLayout(input_layout)
+        console_widget.setLayout(console_layout)
+        error_tabs.addTab(console_widget, "Consola 3AC")
 
         self.main_splitter.addWidget(editor_splitter)
         self.main_splitter.addWidget(error_tabs)
@@ -572,6 +627,10 @@ class IDECompilador(QMainWindow):
         compile_semantic.triggered.connect(self.run_semantic_analysis)
         compile_menu.addAction(compile_semantic)
 
+        run_3ac = QAction(QIcon("assets/play.svg"), "Ejecutar 3AC", self)
+        run_3ac.triggered.connect(self.run_semantic_analysis)
+        compile_menu.addAction(run_3ac)
+
         new_action = QAction(QIcon("assets/file-circle-plus.svg"), "Nuevo", self)
         new_action.triggered.connect(self.create_new_file)
         file_menu.addAction(new_action)
@@ -594,6 +653,13 @@ class IDECompilador(QMainWindow):
         self.toolbar.addAction(save_action)
         self.toolbar.addAction(save_as_action)
         self.toolbar.addAction(close_action)
+        self.toolbar.addAction(run_3ac)
+
+        # Conexiones consola interactiva
+        self.console_input_value = None
+        self.console_wait_loop = None
+        self.console_send_button.clicked.connect(self._console_accept_input)
+        self.console_input_line.returnPressed.connect(self._console_accept_input)
 
         self.setCentralWidget(self.main_splitter)
         self.setGeometry(100, 100, 900, 600)
@@ -707,6 +773,40 @@ class IDECompilador(QMainWindow):
                 self.setWindowTitle("Compilador - IDE")
         except Exception as e:
             print(f"Error en update_window_title: {str(e)}")
+
+    def append_console_output(self, text: str):
+        if hasattr(self, 'console_output_box'):
+            cursor = self.console_output_box.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            self.console_output_box.setTextCursor(cursor)
+            self.console_output_box.insertPlainText(str(text))
+            self.console_output_box.ensureCursorVisible()
+
+    def _console_accept_input(self):
+        # Captura el texto de la línea y despierta al bucle de espera
+        if not hasattr(self, 'console_input_line'):
+            return
+        self.console_input_value = self.console_input_line.text()
+        self.console_input_line.clear()
+        self.console_input_line.setEnabled(False)
+        if hasattr(self, 'console_send_button'):
+            self.console_send_button.setEnabled(False)
+        if self.console_wait_loop:
+            self.console_wait_loop.quit()
+
+    def request_console_input(self, prompt: str = "") -> str:
+        # Muestra prompt en consola y espera a que el usuario escriba y envíe
+        if hasattr(self, 'console_output_box'):
+            self.console_output_box.appendPlainText(prompt or "cin >>")
+        if hasattr(self, 'console_input_line'):
+            self.console_input_line.setEnabled(True)
+            if hasattr(self, 'console_send_button'):
+                self.console_send_button.setEnabled(True)
+            self.console_input_line.setFocus()
+        self.console_input_value = ""
+        self.console_wait_loop = QEventLoop()
+        self.console_wait_loop.exec_()
+        return self.console_input_value or ""
 
     def expand_all(self):
         self.ast_tree.expandAll()

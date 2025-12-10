@@ -1,0 +1,57 @@
+main {
+    float P1, P2, P3, P4, P5, total_reca, importe;
+    int c1, c2, c3, c4, c5, clave, cant;
+    c1 = 0;
+    c2 = 0;
+    c3 = 0;
+    c4 = 0;
+    c5 = 0;
+    total_reca = 0;
+    cin >> P1;
+    cin >> P2;
+    cin >> P3;
+    cin >> P4;
+    cin >> P5;
+    clave = 0;
+    cant = 0;
+    do
+        cin >> clave;
+        if clave != 0 - 1 then
+            cin >> cant;
+            if clave == 1 then
+                importe = P1 * cant;
+                c1 = c1 + cant;
+            else
+                if clave == 2 then
+                    importe = P2 * cant;
+                    c2 = c2 + cant;
+                else
+                    if clave == 3 then
+                        importe = P3 * cant;
+                        c3 = c3 + cant;
+                    else
+                        if clave == 4 then
+                            importe = P4 * cant;
+                            c4 = c4 + cant;
+                        else
+                            if clave == 5 then
+                                importe = P5 * cant;
+                                c5 = c5 + cant;
+                            else
+                                importe = 0;
+                            end
+                        end
+                    end
+                end
+            end
+            total_reca = total_reca + importe;
+            cout << "venta:" << clave << " cant:" << cant << " total:" << importe;
+        end
+    until clave == 0 - 1
+    cout << "c1:" << c1;
+    cout << "c2:" << c2;
+    cout << "c3:" << c3;
+    cout << "c4:" << c4;
+    cout << "c5:" << c5;
+    cout << "recaudacion:" << total_reca;
+}

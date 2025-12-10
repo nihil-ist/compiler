@@ -394,13 +394,13 @@ class Parser:
 
     def termino(self):
         print("Iniciando termino, token actual:", self.token_actual())
-        nodo = self.componente()  # Saltamos factor, vamos directo a componente
+        nodo = self.factor()  # usar factor para soportar potencia ^
         if not nodo:
             return None
         actual = self.token_actual()
         while actual and actual["tipo"] == "OP_ARITMETICO" and actual["lexema"] in ("*", "/", "%"):
             op = self.coincidir("OP_ARITMETICO")
-            der = self.componente()
+            der = self.factor()
             if der:
                 op_nodo = self.crear_nodo_token(op, "arit_op", "termino")
                 op_nodo.agregar_hijo(nodo)
@@ -415,7 +415,7 @@ class Parser:
 
     def factor(self):
         print("Iniciando factor, token actual:", self.token_actual())
-        nodo = self.componente()  # Eliminamos el nodo factor, usamos componente directamente
+        nodo = self.componente()
         if not nodo:
             return None
         actual = self.token_actual()

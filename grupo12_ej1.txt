@@ -1,0 +1,7 @@
+main {
+    float A, B, res;
+    cin >> A;
+    cin >> B;
+    res = (A + B) ^ 2 / 3.0;
+    cout << "resultado:" << res;
+}
