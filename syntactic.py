@@ -1,5 +1,3 @@
-# syntactic.py
-
 class NodoAST:
     def __init__(self, tipo, valor=None, linea=None, columna=None, gramatica=None):
         self.tipo = tipo
@@ -118,21 +116,19 @@ class Parser:
         if not tipo:
             return None
         
-        nodo = NodoAST(tipo["lexema"], linea=tipo["linea"], columna=tipo["columna"])  # Nodo es int, float, bool
+        nodo = NodoAST(tipo["lexema"], linea=tipo["linea"], columna=tipo["columna"]) 
 
-        # primer id
         id_token = self.coincidir("IDENTIFICADOR")
         if id_token:
             nodo.agregar_hijo(self.crear_nodo_token(id_token, "ID"))
 
-        # más ids
         while self.token_actual() and self.token_actual()["lexema"] == ",":
             self.coincidir("DELIMITADOR", ",")
             siguiente_id = self.coincidir("IDENTIFICADOR")
             if siguiente_id:
                 nodo.agregar_hijo(self.crear_nodo_token(siguiente_id, "ID"))
 
-        self.coincidir("DELIMITADOR", ";")  # no agregar ; como hijo
+        self.coincidir("DELIMITADOR", ";") 
         return nodo
 
     def sentencia(self):
@@ -290,27 +286,23 @@ class Parser:
         if not op_token or op_token["tipo"] != "ASIGNACION":
             return None
 
-        self.avanzar()  # Consumir el operador de asignación
+        self.avanzar()
 
         nodo = NodoAST("ASIGNACION", op_token["lexema"], op_token["linea"], op_token["columna"])
         nodo.agregar_hijo(self.crear_nodo_token(id_token, "ID"))
 
-        # Interpretar ++ y -- como asignaciones equivalentes
         if op_token["lexema"] in ("++", "--"):
-            # Crear subárbol para la expresión aritmética con el operador como raíz
             op_aritmetico = NodoAST("OP_ARITMETICO", "+" if op_token["lexema"] == "++" else "-", op_token["linea"], op_token["columna"])
-            op_aritmetico.agregar_hijo(self.crear_nodo_token(id_token, "ID"))  # Primer operando: a o c
-            op_aritmetico.agregar_hijo(NodoAST("NUM_ENTERO", "1", op_token["linea"], op_token["columna"]))  # Segundo operando: 1
+            op_aritmetico.agregar_hijo(self.crear_nodo_token(id_token, "ID"))
+            op_aritmetico.agregar_hijo(NodoAST("NUM_ENTERO", "1", op_token["linea"], op_token["columna"]))
 
-            # Asignar el resultado de la expresión al identificador
             asignacion_nodo = NodoAST("ASIGNACION", "=", op_token["linea"], op_token["columna"])
-            asignacion_nodo.agregar_hijo(self.crear_nodo_token(id_token, "ID"))  # Izquierda: a o c
-            asignacion_nodo.agregar_hijo(op_aritmetico)  # Derecha: expresión aritmética
+            asignacion_nodo.agregar_hijo(self.crear_nodo_token(id_token, "ID"))
+            asignacion_nodo.agregar_hijo(op_aritmetico)
 
             self.coincidir("DELIMITADOR", ";")
             return asignacion_nodo
         else:
-            # Caso normal de asignación con =
             expr = self.expresion()
             if expr:
                 nodo.agregar_hijo(expr)
@@ -394,7 +386,7 @@ class Parser:
 
     def termino(self):
         print("Iniciando termino, token actual:", self.token_actual())
-        nodo = self.factor()  # usar factor para soportar potencia ^
+        nodo = self.factor()
         if not nodo:
             return None
         actual = self.token_actual()

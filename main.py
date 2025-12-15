@@ -300,7 +300,6 @@ class IDECompilador(QMainWindow):
         tokens, lexical_errors = analizar_codigo_fuente(source_code)
 
         if lexical_errors:
-            # Mostrar mensaje en el árbol semántico
             if hasattr(self, 'semantic_tree'):
                 self.semantic_tree.clear()
                 item = QTreeWidgetItem(self.semantic_tree.invisibleRootItem())
@@ -331,14 +330,10 @@ class IDECompilador(QMainWindow):
                 self.execution_output_box.setPlainText("Sin ejecución por errores sintácticos.")
             return
 
-        # Ejecutar análisis semántico
         semantic_result = analizar_semantica(ast)
-        # Mostrar también el análisis semántico en texto (anotado) -- opcional
-        # Rellenar el árbol de la pestaña 'Análisis Semántico' con las anotaciones
         if hasattr(self, 'semantic_tree'):
             self.semantic_tree.clear()
             self.populate_semantic_tree(ast, self.semantic_tree.invisibleRootItem())
-        # Mostrar tabla de símbolos simplificada
         self.symbol_table_box.setPlainText(semantic_result.symbol_table_text)
 
         combined_errors: List[str] = []
@@ -349,7 +344,6 @@ class IDECompilador(QMainWindow):
 
         self.semantic_errors_box.setPlainText(formatear_errores_semanticos(combined_errors))
 
-        # Generación y ejecución de código intermedio (3AC)
         if syntactic_errors:
             self.intermediate_code_box.setPlainText("No se generó código intermedio por errores sintácticos.")
             if hasattr(self, 'execution_output_box'):
@@ -371,20 +365,17 @@ class IDECompilador(QMainWindow):
             if hasattr(self, 'execution_output_box'):
                 self.execution_output_box.setPlainText(output_lines)
 
-        # Seleccionar la pestaña del análisis semántico
         try:
             if hasattr(self, 'semantic_tree') and self.semantic_tree.parent():
                 idx = self.analysis_tabs.indexOf(self.semantic_tree.parent())
                 if idx != -1:
                     self.analysis_tabs.setCurrentIndex(idx)
                 else:
-                    # fallback: choose by label if available
                     for i in range(self.analysis_tabs.count()):
                         if self.analysis_tabs.tabText(i) == "Análisis Semántico":
                             self.analysis_tabs.setCurrentIndex(i)
                             break
             else:
-                # fallback to sensible index
                 for i in range(self.analysis_tabs.count()):
                     if self.analysis_tabs.tabText(i) == "Análisis Semántico":
                         self.analysis_tabs.setCurrentIndex(i)
@@ -393,32 +384,27 @@ class IDECompilador(QMainWindow):
             pass
 
     def populate_tree(self, nodo, parent):
-        # Tipos de nodos a omitir (excluir nodos intermedios sin valor significativo)
         excluded_types = [
             "programa", "lista_sentencias", "lista_declaracion", "expresion",
             "expresion_logica", "expresion_relacional", "expresion_aritmetica",
             "termino", "factor", "sent_in", "sent_out"
         ]
         
-        # Si el nodo es de un tipo excluido y tiene hijos, procesar solo los hijos
         if nodo.tipo in excluded_types and nodo.hijos:
             for hijo in nodo.hijos:
                 self.populate_tree(hijo, parent)
             return
         
-        # Crear item para nodos visibles, incluyendo estructuras de control
         item = QTreeWidgetItem(parent)
-        # Columna 0: Nodo
         if nodo.tipo == "ASIGNACION":
             item.setText(0, nodo.valor or "=")
         elif nodo.tipo in ("int", "float", "bool") or \
              (nodo.tipo == "RESERVADA" and nodo.valor in ("int", "float", "bool", "if", "then", "else", "end", "while", "do", "until")):
             item.setText(0, nodo.valor or nodo.tipo)
         elif nodo.tipo == "expresion_aritmetica":
-            item.setText(0, "")  # No mostrar el tipo, solo los hijos
+            item.setText(0, "")
         else:
             item.setText(0, nodo.valor or "")
-        # Columna 1: Tipo
         if nodo.tipo == "ASIGNACION":
             item.setText(1, nodo.valor or "=")
         elif nodo.tipo in ("int", "float", "bool") or \
@@ -428,13 +414,10 @@ class IDECompilador(QMainWindow):
             item.setText(1, "expresion_aritmetica")
         else:
             item.setText(1, nodo.tipo)
-        # Columnas 2 y 3: Línea y Columna
         item.setText(2, str(nodo.linea or ""))
         item.setText(3, str(nodo.columna or ""))
-        # Procesar hijos, incluyendo anidamiento de estructuras de control
         for hijo in nodo.hijos:
             self.populate_tree(hijo, item)
-        # Expandir automáticamente para ver la estructura
         item.setExpanded(True)
 
 
@@ -451,21 +434,17 @@ class IDECompilador(QMainWindow):
             return
 
         item = QTreeWidgetItem(parent)
-        # Construir etiqueta tal como en el formato de texto anotado
         tipo_attr = getattr(nodo, 'tipo_semantico', None)
         val_attr = getattr(nodo, 'valor_semantico', None)
-        # base label: tipo y (valor token) si existe
         label = f"{nodo.tipo}"
         if getattr(nodo, 'valor', None):
             label += f" ({nodo.valor})"
-        # si hay anotaciones semánticas, añadir [tipo=..., valor=...]
         if tipo_attr is not None or val_attr is not None:
             type_text = tipo_attr if tipo_attr is not None else "-"
             value_text = "-" if val_attr is None else str(val_attr)
             label += f" [tipo={type_text}, valor={value_text}]"
 
         item.setText(0, label)
-        # Columna 1: número de línea (si existe)
         item.setText(1, str(getattr(nodo, 'linea', '') or ""))
 
         for hijo in nodo.hijos:
@@ -525,7 +504,6 @@ class IDECompilador(QMainWindow):
         self.syntax_analysis_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.analysis_tabs.addTab(self.syntax_analysis_box, "Análisis Sintáctico")
 
-        # Pestaña: ÁRBOL del Análisis Semántico (visual)
         semantic_widget = QWidget()
         semantic_layout = QVBoxLayout()
         semantic_toolbar = QToolBar()
@@ -538,7 +516,6 @@ class IDECompilador(QMainWindow):
         semantic_toolbar.addAction(collapse_sem_action)
 
         self.semantic_tree = QTreeWidget()
-        # Mostrar solo la anotación semántica y la línea
         self.semantic_tree.setHeaderLabels(["Anotación", "Ln"])
         self.semantic_tree.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         self.semantic_tree.setItemDelegateForColumn(0, TreeIndentDelegate())
@@ -587,7 +564,6 @@ class IDECompilador(QMainWindow):
         self.execution_output_box.setStyleSheet("background-color: #2d2a2e; color: #ffffff;")
         error_tabs.addTab(self.execution_output_box, "Resultados 3AC")
 
-        # Consola interactiva para cin/cout
         console_widget = QWidget()
         console_layout = QVBoxLayout()
         self.console_output_box = QPlainTextEdit()
@@ -655,7 +631,6 @@ class IDECompilador(QMainWindow):
         self.toolbar.addAction(close_action)
         self.toolbar.addAction(run_3ac)
 
-        # Conexiones consola interactiva
         self.console_input_value = None
         self.console_wait_loop = None
         self.console_send_button.clicked.connect(self._console_accept_input)
@@ -783,7 +758,6 @@ class IDECompilador(QMainWindow):
             self.console_output_box.ensureCursorVisible()
 
     def _console_accept_input(self):
-        # Captura el texto de la línea y despierta al bucle de espera
         if not hasattr(self, 'console_input_line'):
             return
         self.console_input_value = self.console_input_line.text()
@@ -795,7 +769,6 @@ class IDECompilador(QMainWindow):
             self.console_wait_loop.quit()
 
     def request_console_input(self, prompt: str = "") -> str:
-        # Muestra prompt en consola y espera a que el usuario escriba y envíe
         if hasattr(self, 'console_output_box'):
             self.console_output_box.appendPlainText(prompt or "cin >>")
         if hasattr(self, 'console_input_line'):

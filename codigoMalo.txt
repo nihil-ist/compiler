@@ -1,5 +1,5 @@
 main {
-    int x y;  // Falta coma entre identificadores
-    while x < 0  // Falta ) y lista_sentencias
-    cin >>  // Falta id y ;
+    int x y;
+    while x < 0
+    cin >>
 }

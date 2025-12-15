@@ -19,7 +19,6 @@ class SymbolTableEntry:
     line: Optional[int]
     column: Optional[int]
     value: Any = None
-    # Lista de todas las lineas donde aparece el identificador (declaracion + usos)
     lines: List[int] = field(default_factory=list)
 
 
@@ -60,7 +59,6 @@ class SymbolTable:
             line=line,
             column=column,
         )
-        # registrar la linea de declaracion si esta disponible
         if line is not None:
             entry.lines.append(line)
         current_scope[name] = entry
@@ -76,12 +74,8 @@ class SymbolTable:
         return None
 
     def record_occurrence(self, name: str, line: Optional[int]) -> None:
-        """Registra una aparicion (uso) del identificador en la linea dada."""
         if line is None:
             return
-        # Registrar la aparicion independientemente de si ya existe la misma
-        # linea en la lista. Esto permite contabilizar usos repetidos en la
-        # misma linea (por ejemplo, "a = a + 1" o "a++" => dos apariciones).
         for scope in reversed(self.scopes):
             entry = scope.get(name)
             if entry:
@@ -89,7 +83,6 @@ class SymbolTable:
                 return
 
     def format(self) -> str:
-        # Mostrar solo: nombre, tipo, ambito, valor, lineas (todas las apariciones)
         if not self.entries:
             return "Tabla de simbolos vacia."
         header = "{:<20}{:<10}{:<18}{:<15}{}\n".format(
@@ -98,7 +91,6 @@ class SymbolTable:
         lines = [header, "-" * 80 + "\n"]
         for entry in self.entries:
             value_text = "-" if entry.value is None else str(entry.value)
-            # Mostrar absolutamente todas las apariciones (incluso duplicados)
             lines_list = ",".join(str(l) for l in entry.lines) if entry.lines else "-"
             lines.append("{:<20}{:<10}{:<18}{:<15}{}\n".format(entry.name, entry.type, entry.scope, value_text, lines_list))
         return "".join(lines)
@@ -189,7 +181,6 @@ class SemanticAnalyzer:
             else:
                 target_node.tipo_semantico = entry.type
                 target_node.valor_semantico = entry.value
-                # registrar uso en la tabla de simbolos
                 self.symbol_table.record_occurrence(entry.name, getattr(target_node, 'linea', None))
         expr_type, expr_value = self.evaluate_expression(expr_node)
         if entry and expr_type:
@@ -336,14 +327,10 @@ class SemanticAnalyzer:
                 node.tipo_semantico = None
                 node.valor_semantico = None
                 return None, None
-            # registrar uso en la tabla (aparece en esta linea)
             self.symbol_table.record_occurrence(entry.name, getattr(node, 'linea', None))
             node.tipo_semantico = entry.type
             node.valor_semantico = entry.value
             return entry.type, entry.value
-        # Normalize checks using the lower-cased node.tipo so we accept
-        # variants produced by the parser (e.g. 'OP_ARITMETICO') as well
-        # as normalized names like 'arit_op', 'rel_op', 'op_logico', 'log_op'.
         if "arit" in tipo:
             return self._evaluate_arithmetic(node)
         if "rel" in tipo:
@@ -352,7 +339,6 @@ class SemanticAnalyzer:
             return self._evaluate_logical(node)
         if tipo == "log_op" or "log_op" in tipo:
             return self._evaluate_unary_logical(node)
-        # Fallback: evaluate children to propagate annotations
         last_type: Optional[str] = None
         last_value: Optional[Any] = None
         for child in node.hijos:
@@ -379,8 +365,6 @@ class SemanticAnalyzer:
             node.tipo_semantico = None
             node.valor_semantico = None
             return None, None
-        # Determine result type: if any operand is float -> float.
-        # For division: if both operands are int, produce an int (truncating division).
         if node.valor == "/":
             if left_type == "int" and right_type == "int":
                 result_type = "int"
@@ -389,10 +373,8 @@ class SemanticAnalyzer:
         else:
             result_type = "float" if "float" in {left_type, right_type} else "int"
 
-        # Compute value respecting integer-division semantics when appropriate
         if node.valor == "/" and result_type == "int":
             try:
-                # Truncate toward zero to match common integer-division semantics
                 value = None if left_value is None or right_value is None else int(left_value / right_value)
             except ZeroDivisionError:
                 self.errors.append("Division entre cero detectada.")

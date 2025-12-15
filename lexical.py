@@ -1,5 +1,3 @@
-# lexer.py
-
 RESERVADAS = {
     "if", "else", "end", "do", "while", "then", "until", "switch", "case",
     "int", "float", "main", "cin", "cout", "true", "false", "bool"
@@ -48,20 +46,17 @@ def analizar_codigo_fuente(codigo):
     while i < longitud:
         c = codigo[i]
 
-        # Ignorar espacios y tabulaciones
         if c in " \t":
             i += 1
             columna += 1
             continue
 
-        # Nueva línea
         if c == "\n":
             fila += 1
             columna = 1
             i += 1
             continue
 
-        # Comentario de una línea
         if c == "/" and i + 1 < longitud and codigo[i + 1] == "/":
             inicio_col = columna
             lexema = "//"
@@ -74,7 +69,6 @@ def analizar_codigo_fuente(codigo):
             tokens.append({"lexema": lexema, "tipo": "COMENTARIO", "linea": fila, "columna": inicio_col})
             continue
 
-        # Comentario multilínea
         if c == "/" and i + 1 < longitud and codigo[i + 1] == "*":
             inicio_col = columna
             lexema = "/*"
@@ -103,7 +97,6 @@ def analizar_codigo_fuente(codigo):
             continue
 
 
-        # Dentro del bucle while i < longitud:
         if c == '"':
             inicio_col = columna
             lexema = c
@@ -123,7 +116,6 @@ def analizar_codigo_fuente(codigo):
             continue
 
 
-        # Dentro del bucle while i < longitud en analizar_codigo_fuente
         if i + 1 < longitud and codigo[i:i+2] in ("<<", ">>"):
             lexema = codigo[i:i+2]
             tokens.append({"lexema": lexema, "tipo": "OP_ENTRADA_SALIDA", "linea": fila, "columna": columna})
@@ -142,7 +134,6 @@ def analizar_codigo_fuente(codigo):
             tokens.append({"lexema": lexema, "tipo": tipo, "linea": fila, "columna": columna - len(lexema)})
             continue
 
-        # Números (enteros o flotantes)
         if c.isdigit():
             inicio_col = columna
             lexema = c
@@ -151,7 +142,6 @@ def analizar_codigo_fuente(codigo):
             tiene_punto = False
             while i < longitud and (codigo[i].isdigit() or (codigo[i] == '.' and not tiene_punto)):
                 if codigo[i] == '.':
-                    # Verificar que haya al menos un dígito después del punto
                     if i + 1 < longitud and codigo[i + 1].isdigit():
                         lexema += codigo[i]
                         tiene_punto = True
@@ -160,7 +150,7 @@ def analizar_codigo_fuente(codigo):
                     else:
                         lexema += codigo[i]
                         notValidNumber = True
-                        break  # No es un número válido, salir del bucle
+                        break
                 lexema += codigo[i]
                 i += 1
                 columna += 1
@@ -169,7 +159,6 @@ def analizar_codigo_fuente(codigo):
             tokens.append({"lexema": lexema, "tipo": tipo, "linea": fila, "columna": inicio_col})
             continue
 
-        # Identificadores o palabras reservadas
         if es_letra(c):
             inicio_col = columna
             lexema = c
@@ -183,7 +172,6 @@ def analizar_codigo_fuente(codigo):
             tokens.append({"lexema": lexema, "tipo": tipo, "linea": fila, "columna": inicio_col})
             continue
 
-        # Operadores de dos caracteres
         if i + 1 < longitud and codigo[i:i+2] in OPERADORES:
             lexema = codigo[i:i+2]
             tokens.append({"lexema": lexema, "tipo": OPERADORES[lexema], "linea": fila, "columna": columna})
@@ -191,21 +179,18 @@ def analizar_codigo_fuente(codigo):
             columna += 2
             continue
 
-        # Operadores de un carácter
         if c in OPERADORES:
             tokens.append({"lexema": c, "tipo": OPERADORES[c], "linea": fila, "columna": columna})
             i += 1
             columna += 1
             continue
 
-        # Delimitadores
         if c in DELIMITADORES:
             tokens.append({"lexema": c, "tipo": "DELIMITADOR", "linea": fila, "columna": columna})
             i += 1
             columna += 1
             continue
 
-        # Carácter no reconocido
         if notValidNumber:
             errores.append({"linea": fila, "columna": columna, "descripcion": f"Se uso un punto de forma erronea: '{c}'", "valor": c})
             notValidNumber =False
@@ -222,7 +207,6 @@ def generar_tabla_tokens(tokens):
     tabla = "Lexema\t\tTipo\t\tLínea\tColumna\n"
     tabla += "-" * 50 + "\n"
     for t in tokens:
-        # if (t['tipo'] != "ERROR"):
         if t['tipo'] not in ("ERROR", "COMENTARIO"):
             tabla += f"{t['lexema']}\t\t{t['tipo']}\t\t{t['linea']}\t{t['columna']}\n"
     return tabla

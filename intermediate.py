@@ -1,14 +1,7 @@
-"""Generador y ejecutor de código intermedio (tres direcciones).
-Basado en el AST producido por `syntactic.Parser`.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
-
-# ---------------------------
-# Modelos de instrucciones
-# ---------------------------
 
 @dataclass
 class TACInstruction:
@@ -18,7 +11,6 @@ class TACInstruction:
     result: Optional[Any] = None
 
     def format(self) -> str:
-        """Devuelve la representación legible de la instrucción."""
         if self.op == "label":
             return f"{self.result}:"
         if self.op == "goto":
@@ -44,10 +36,6 @@ class ExecutionResult:
     variables: Dict[str, Any]
     errors: List[str]
 
-
-# ---------------------------
-# Generador de código 3AC
-# ---------------------------
 
 class TACGenerator:
     expression_nodes = {
@@ -91,22 +79,16 @@ class TACGenerator:
         self._gen_node(ast_root)
         return list(self.instructions)
 
-    # ------------
-    # Nodos de AST
-    # ------------
-
-    def _gen_node(self, node):  # type: ignore[override]
+    def _gen_node(self, node):
         if node is None:
             return
         handler = getattr(self, f"_gen_{node.tipo}", None)
         if handler:
             handler(node)
             return
-        # Fallback: procesar hijos
         for child in getattr(node, "hijos", []):
             self._gen_node(child)
 
-    # programa -> procesa lista_declaracion
     def _gen_programa(self, node):
         for child in node.hijos:
             self._gen_node(child)
@@ -115,7 +97,6 @@ class TACGenerator:
         for child in node.hijos:
             self._gen_node(child)
 
-    # Declaraciones simples: int | float | bool con hijos ID
     def _gen_int(self, node):
         self._gen_declaracion_tipo(node, "int")
 
@@ -130,7 +111,6 @@ class TACGenerator:
             if child.tipo == "ID":
                 self.emit("declare", tipo, None, child.valor)
 
-    # Asignación: hijo0 = ID, hijo1 = expresión
     def _gen_ASIGNACION(self, node):
         if not node.hijos:
             return
@@ -148,12 +128,10 @@ class TACGenerator:
             if child.tipo in self.expression_nodes:
                 self._gen_expr(child)
 
-    # if ... then ... [else ...] end
     def _gen_seleccion(self, node):
         expr_node = None
         then_block = None
         else_block = None
-        # hijos: if, expr, then, lista_sentencias, [else, lista_sentencias], end
         temp_blocks: List[Any] = []
         for child in node.hijos:
             if child.tipo == "lista_sentencias":
@@ -178,7 +156,6 @@ class TACGenerator:
             self._gen_node(else_block)
             self.emit("label", None, None, label_end)
 
-    # while expr lista_sentencias end
     def _gen_iteracion(self, node):
         start = self.new_label("Lwhile")
         end = self.new_label("Lwend")
@@ -197,7 +174,6 @@ class TACGenerator:
         self.emit("goto", None, None, start)
         self.emit("label", None, None, end)
 
-    # do lista_sentencias until expr
     def _gen_repeticion(self, node):
         start = self.new_label("Ldo")
         self.emit("label", None, None, start)
@@ -211,18 +187,15 @@ class TACGenerator:
         if body:
             self._gen_node(body)
         cond_temp = self._gen_expr(expr_node)
-        # repetir hasta que la condicion sea verdadera -> si es falsa, seguir repitiendo
         self.emit("if_false", cond_temp, None, start)
 
     def _gen_sent_in(self, node):
-        # hijos: cin, >>, id, ;
         for child in node.hijos:
             if child.tipo in {"id", "ID"}:
                 self.emit("input", None, None, child.valor)
                 break
 
     def _gen_sent_out(self, node):
-        # hijos: cout, (<<, expr|cadena)*, ;
         for child in node.hijos:
             if child.tipo in self.expression_nodes:
                 temp = self._gen_expr(child)
@@ -230,12 +203,7 @@ class TACGenerator:
             elif child.tipo == "cadena":
                 literal = f'"{child.valor}"'
                 self.emit("print", literal)
-        # Añade salto de línea tras cada sentencia cout (comportamiento parecido a std::endl)
         self.emit("print_nl")
-
-    # -----------------
-    # Expresiones
-    # -----------------
 
     def _gen_expr(self, node) -> Any:
         if node is None:
@@ -249,7 +217,6 @@ class TACGenerator:
             return node.valor
         if tipo in {"arit_op", "rel_op", "op_logico", "log_op", "pot_op"}:
             op = node.valor
-            # operador unario (!)
             if tipo == "log_op" or (op == "!" and len(node.hijos) == 1):
                 operand = self._gen_expr(node.hijos[0]) if node.hijos else None
                 temp = self.new_temp()
@@ -260,7 +227,6 @@ class TACGenerator:
             temp = self.new_temp()
             self.emit(op, left, right, temp)
             return temp
-        # fallback: procesar el último hijo
         last = None
         for child in node.hijos:
             last = self._gen_expr(child)
@@ -281,10 +247,6 @@ class TACGenerator:
             return True if str(node.valor).lower() == "true" else False
         return node.valor
 
-
-# ---------------------------
-# Formateo y ejecución
-# ---------------------------
 
 
 def generar_codigo_intermedio(ast_root) -> List[TACInstruction]:
@@ -335,7 +297,6 @@ class TACExecutor:
                 return value.lower() == "true"
             if value in self.env:
                 return self.env[value]
-            # intentar parsear numero literal representado como str
             try:
                 return int(value)
             except Exception:
@@ -346,7 +307,6 @@ class TACExecutor:
         return value
 
     def _strip_quotes(self, text: str) -> str:
-        # Elimina múltiples capas de comillas simples o dobles
         while len(text) >= 2 and (
             (text[0] == '"' and text[-1] == '"') or (text[0] == "'" and text[-1] == "'")
         ):
@@ -465,11 +425,9 @@ class TACExecutor:
                 self.env[inst.result] = value
                 pc += 1
                 continue
-            # Operadores binarios
             value = self._binary(op, self._resolve(inst.arg1), self._resolve(inst.arg2))
             self.env[inst.result] = value
             pc += 1
-        # Mantener las salidas en la misma línea salvo que el código imprima saltos explícitos
         return ExecutionResult(output="".join(self.output_parts), variables=dict(self.env), errors=self.errors)
 
     def _auto_cast(self, raw: str) -> Any:

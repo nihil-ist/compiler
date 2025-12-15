@@ -13,13 +13,6 @@ print('\nSyntactic errors:', syn_errors)
 print('\nAST:')
 print(ast if (ast:=ast if False else ast) is not None else 'No AST')
 
-# The parser returns ast in first position of tuple; adjust
-ast = ast if False else (ast if False else None)
-# (above is placeholder; we'll instead take the returned object properly)
-
-# Re-run correctly using values returned
-ast, syn_errors = analizar_sintacticamente(filtered)
-
 print('\nAST (str):')
 print(str(ast))
 
